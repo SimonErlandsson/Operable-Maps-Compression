@@ -8,6 +8,11 @@ import geopandas as gpd
 
 class NoCompression(CompressionAlgorithm):
 
+    # Can be initialized in "compressed state", if given path to the "compressed" path
+    # Needed when using this implementation for correctness check
+    def __init__(self, file_comp=None):
+        self.file_comp = file_comp
+
     def compress(self, file_uncomp, file_comp):
         shutil.copyfile(file_uncomp, file_comp)
         self.file_comp = file_comp
