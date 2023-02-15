@@ -34,11 +34,10 @@ class Geo2Wkb(CompressionAlgorithm):
         self.file_comp = file_comp
                 
 
-    def decompress(self, file_decomp, file_comp):
+    def decompress(self, file_comp, file_decomp):
         #Extract the file in WKT format where each line is a geometry
         f = open(file_comp, 'r')
         lines = f.readlines()
-
         #For each geometry convert to corresponding json format
         feauture_list = []
         for line in lines:
@@ -46,7 +45,6 @@ class Geo2Wkb(CompressionAlgorithm):
 
         #Create the FeatureCollection wrapper standard to GeoJson
         geojson_dict = {"type": "FeatureCollection", "features": feauture_list}   
-
         #Write to file
         with open(file_decomp, "w") as file:
             json.dump(geojson_dict, file)
@@ -82,3 +80,14 @@ class Geo2Wkb(CompressionAlgorithm):
         line_at_idx = linecache.getline(self.file_comp, idx)
         geometry = shapely.wkt.loads(line_at_idx)
         return geometry.length
+    
+
+
+def main():
+        x = Geo2Wkb()
+        x.compress('data/lund_building_highway.json', 'data/testbench_compressed')
+        x.decompress('data/testbench_compressed', 'data/testbench_decompressed')
+
+        
+if __name__ == "__main__":
+        main()
