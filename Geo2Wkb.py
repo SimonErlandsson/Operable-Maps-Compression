@@ -5,10 +5,14 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import shape
 import shapely.wkt
+import linecache
 
 
 
 class Geo2Wkb(CompressionAlgorithm):
+    #Fields for saving most recent compressed/decompressed file
+    file_comp = None
+    file_decomp = None 
 
     def compress(self, file_uncomp, file_comp):
         #Extract the nested feature attribute of the geo_json file containing the geometries
@@ -19,13 +23,15 @@ class Geo2Wkb(CompressionAlgorithm):
         
         #Fill an array of all the geometries. Done for only writing once to the list
         rows = []
-        for idx, row in df.iterrows():
+        for _, row in df.iterrows():
             rows.append(str(shape(row).wkt) + '\n')
             
         #Write the result to file
         f = open(file_comp, 'w')
         f.writelines(rows)
         f.close()
+
+        self.file_comp = file_comp
                 
 
     def decompress(self, file_decomp, file_comp):
@@ -44,38 +50,35 @@ class Geo2Wkb(CompressionAlgorithm):
         #Write to file
         with open(file_decomp, "w") as file:
             json.dump(geojson_dict, file)
+        
+        self.file_decomp = file_decomp
 
-       
-
+        
     def geometry_count(self):
         return len(open(self.file_comp).readlines('\n'))
 
 
 # ---- UNARY ---- #
     def vertices(self, idx):
-        with open(self.file_comp) as f:
-            data = json.load(f)['features'][idx]['geometry']['coordinates']
-        return data
+        line_at_idx = linecache.getline(self.file_comp, idx)
+        geometry = shapely.wkt.loads(line_at_idx)
+        return list(geometry.coords)
 
     def type(self, idx):
-        with open(self.file_comp) as f:
-            data = json.load(f)['features'][idx]['geometry']['type']
-        return data
+        line_at_idx = linecache.getline(self.file_comp, idx)
+        geometry = shapely.wkt.loads(line_at_idx)
+        return geometry.geom_type
 
     def vertex_count(self, idx):
-        with open(self.file_comp) as f:
-            data = json.load(f)['features'][idx]['geometry']['coordinates']
-        return len(data)
-
+        return len(self.vertices(idx))
+            
     # For Polygon
     def area(self, idx):
-        # with open(self.file_comp) as f:
-        #    data = json.load(f)['features'][idx]
-        # return gpd.GeoSeries.from_xy(data['geometry'])
-        pass
+        line_at_idx = linecache.getline(self.file_comp, idx)
+        geometry = shapely.wkt.loads(line_at_idx)
+        return geometry.area
 
     def length(self, idx):
-        # with open(self.file_comp) as f:
-        #    data = json.load(f)['features'][idx]['geometry']
-        # return gpd.GeoSeries(geometry=data).length()
-        pass
+        line_at_idx = linecache.getline(self.file_comp, idx)
+        geometry = shapely.wkt.loads(line_at_idx)
+        return geometry.length
