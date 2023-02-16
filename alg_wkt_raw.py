@@ -72,7 +72,9 @@ class WktRaw(CompressionAlgorithm):
         return geometry.geom_type
 
     def vertex_count(self, idx):
-        return len(self.vertices(idx))
+        line_at_idx = linecache.getline(self.file_comp, idx + 1)
+        geometry = shapely.wkt.loads(line_at_idx)
+        return shapely.count_coordinates(geometry)
 
     # For Polygon
     def area(self, idx):
@@ -90,7 +92,7 @@ def main():
     x = WktRaw()
     x.compress('data/lund_building_highway.json', 'data/testbench_compressed')
     x.decompress('data/testbench_compressed', 'data/testbench_decompressed')
-    print(x.vertices(16414))
+    print(x.vertices(2404))
 
 
 if __name__ == "__main__":
