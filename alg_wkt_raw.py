@@ -5,6 +5,7 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import shape
 import shapely.wkt
+import shapely
 import linecache
 
 
@@ -59,12 +60,10 @@ class WktRaw(CompressionAlgorithm):
 # ---- UNARY ---- #
     # Note: getline is not zero-index based
 
-
     def vertices(self, idx):
         line_at_idx = linecache.getline(self.file_comp, idx + 1)
         geometry = shapely.wkt.loads(line_at_idx)
         return shapely.get_coordinates(geometry)
-
 
     def type(self, idx):
         line_at_idx = linecache.getline(self.file_comp, idx + 1)
@@ -92,7 +91,6 @@ def main():
     x = WktRaw()
     x.compress('data/lund_building_highway.json', 'data/testbench_compressed')
     x.decompress('data/testbench_compressed', 'data/testbench_decompressed')
-    print(x.vertices(2404))
 
 
 if __name__ == "__main__":
