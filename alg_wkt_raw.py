@@ -62,9 +62,9 @@ class WktRaw(CompressionAlgorithm):
 
     def vertices(self, idx):
         line_at_idx = linecache.getline(self.file_comp, idx + 1)
-        print(line_at_idx)
         geometry = shapely.wkt.loads(line_at_idx)
-        return list(geometry.coords)
+        return shapely.get_coordinates(geometry)
+
 
     def type(self, idx):
         line_at_idx = linecache.getline(self.file_comp, idx + 1)
@@ -78,19 +78,19 @@ class WktRaw(CompressionAlgorithm):
     def area(self, idx):
         line_at_idx = linecache.getline(self.file_comp, idx + 1)
         geometry = shapely.wkt.loads(line_at_idx)
-        return geometry.area
+        return shapely.area(geometry)
 
     def length(self, idx):
         line_at_idx = linecache.getline(self.file_comp, idx + 1)
         geometry = shapely.wkt.loads(line_at_idx)
-        return geometry.length
+        return shapely.length(geometry)
 
 
 def main():
     x = WktRaw()
     x.compress('data/lund_building_highway.json', 'data/testbench_compressed')
     x.decompress('data/testbench_compressed', 'data/testbench_decompressed')
-    x.vertices(2460)
+    print(x.vertices(16414))
 
 
 if __name__ == "__main__":
