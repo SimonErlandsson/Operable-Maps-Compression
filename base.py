@@ -11,10 +11,6 @@ class CompressionAlgorithm(ABC):
     def decompress(self, file_comp, file_decomp):
         pass
 
-    @abstractmethod
-    def geometry_count(self):
-        pass
-
 # ---- UNARY ---- #
     @abstractmethod
     def vertices(self, idx):
