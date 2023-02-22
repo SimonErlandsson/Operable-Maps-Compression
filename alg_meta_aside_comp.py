@@ -6,6 +6,7 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import shape
 import shapely.wkt
+import shapely
 import linecache
 import gzip
 import time
@@ -16,9 +17,8 @@ class SetAsideCompression(CompressionAlgorithm):
     num_to_type = {}
     max_geom_idx = 0
 
-
     #Expects a geoJSON file
-    def compress(self, file_comp, geometry):
+    def compress(self, geometry):
         #Convert the geometry category names to numbers for smaller space (COMMENTED OUT FOR NOW) <- REF 1
         
         # type_comp = pd.factorize(file_df['geometry.type'])
@@ -26,83 +26,92 @@ class SetAsideCompression(CompressionAlgorithm):
         # self.num_to_type.update({(type_name, idx) for idx, type_name in enumerate(type_comp[1])})
 
         #Create pre computed values to store as metadata
+        s = time.perf_counter()
         geo_type = geometry.geom_type #self.num_to_type[geometry.geom_type] <- FOR REF 1
         geo_vert_count = shapely.count_coordinates(geometry)
         geo_area = shapely.area(geometry)
         geo_length = shapely.length(geometry)
 
         #Write the metadata data for the operations as a special file per geometry
-        f = open(file_comp, "w")
-        f.write(str(geo_type) + "\t" + str(geo_vert_count) + "\t" + str(geo_area) + "\t" + str(geo_length) + "\n")
+        content = (bytes(str(geo_type) + "\t" + str(geo_vert_count) + "\t" + str(geo_area) + "\t" + str(geo_length) + "\n", 'utf-8'))
 
         #Write the compressed geometry
-        compressed_geometry = gzip.compress(bytes(str(geometry), 'utf-8'))
-        f = open(file_comp, "ab")
-        f.write(compressed_geometry)
-        f.close() 
-             
-        
+        content += gzip.compress(bytes(str(geometry), 'utf-8'))
+        t = time.perf_counter()
+        return t - s, content
+    
 
-    def decompress(self, file_comp, file_decomp):
-        #Extract the number of files contained in the compression map
-        nbr_of_geoms = len([entry for entry in os.listdir(file_comp) if os.path.isfile(os.path.join(file_comp, entry))])
-        feauture_list = []
-        
-        #Iterate through each file, decompress geometry and append to decompression structure
-        for idx in range(nbr_of_geoms):
-            f = open('%s/%s.txt'%(file_comp, idx), "rb")
-            next(f)  #Skip first line containing operation information
-            decompressed_data = gzip.decompress(f.read()).decode('utf-8') #Decompressing data
-            f.close()
-
-            #Add decompressed data as JSON structure to the feature list containing all decompressed geometries
-            feauture_list.append({'type': 'Feature', 'properties': {
-            }, 'geometry': shapely.geometry.mapping(shapely.wkt.loads(decompressed_data))})
-        
-        # Create the FeatureCollection wrapper standard to GeoJson
-        geojson_dict = {"type": "FeatureCollection", "features": feauture_list}
-       
-        # Write to file
-        with open(file_decomp, "w") as file:
-            json.dump(geojson_dict, file)
-
-        self.file_decomp = file_decomp
-
-
+    def decompress(self, bin):
+        s = time.perf_counter()
+        data = bin.split(b'\n', 1)[1] # Split at newline byte
+        decomp_geom = gzip.decompress(data).decode('utf-8') # Decompressing data
+        t = time.perf_counter()
+        return t - s, decomp_geom     
 
 
 # ---- UNARY ---- #
 
-    def vertices(self, bin_file):
+    def vertices(self, bin):
         s = time.perf_counter()
-        data = data.split(b'\n', 1)[1] # Split at newline byte
-        decompressed_data = gzip.decompress(data).decode('utf-8')
-        geometry = shapely.wkt.loads(decompressed_data)
+        data = bin.split(b'\n', 1)[1] # Split at newline byte
+        decomp_geom = gzip.decompress(data).decode('utf-8')
+        geometry = shapely.wkt.loads(decomp_geom)
         coords = shapely.get_coordinates(geometry)
         t = time.perf_counter()
         return t - s, coords
 
-
-    def type(self, idx):
-        idx_file = open('%s/%s.txt'%(self.file_comp_path, idx), "rb")
-        data = idx_file.readline().decode('utf-8').split('\t')
-        return data[0]
+    def type(self, bin): 
+        s = time.perf_counter()
+        data = bin.split(b'\t', 1)[0] # Split at \t
+        t = time.perf_counter()
+        return t - s, data 
     
-    def vertex_count(self, idx):
-        idx_file = open('%s/%s.txt'%(self.file_comp_path, idx), "rb")
-        data = idx_file.readline().decode('utf-8').split('\t')
-        return data[1]
+    def bounding_box(self, bin):
+        s = time.perf_counter()
+        data = bin.split(b'\n', 1)[1] # Split at newline byte
+        decomp_geom = gzip.decompress(data).decode('utf-8')
+        geometry = shapely.wkt.loads(decomp_geom)
+        bounds = shapely.bounds(geometry)
+        t = time.perf_counter()
+        return t - s, bounds
+    
+    def add_vertex(self, args):
+        bin, idx, pos = args
+        s = time.perf_counter()
+        data = bin.split(b'\n', 1)[1] # Split at newline byte
+        decomp_geom = gzip.decompress(data).decode('utf-8')
+        geometry = shapely.wkt.loads(decomp_geom)
+        coords = shapely.get_coordinates(geometry)
+        print(len(idx))
+        print(coords)
+        # Fix add
+        _, bin = self.compress(geometry)
+        t = time.perf_counter()
+        return t - s, bin
+    
+    def is_intersecting(self, args):
+        l_bin, r_bin = args
+        s = time.perf_counter()
+        _, l_geo = self.decompress(l_bin)
+        l_geo = shapely.wkt.loads(l_geo)
 
-    # For Polygon
-    def area(self, idx):
-        idx_file = open('%s/%s.txt'%(self.file_comp_path, idx), "rb")
-        data = idx_file.readline().decode('utf-8').split('\t')
-        return data[2]
+        _, r_geo = self.decompress(r_bin)
+        r_geo = shapely.wkt.loads(r_geo)
+        shapely.intersects(l_geo, r_geo)
+        t = time.perf_counter()
+        return t - s, True
 
-    def length(self, idx):
-        idx_file = open('%s/%s.txt'%(self.file_comp_path, idx), "rb")
-        data = idx_file.readline().decode('utf-8').split('\t')
-        return data[3]
+    def intersection(self, args):
+        l_bin, r_bin = args
+        s = time.perf_counter()
+        _, l_geo = self.decompress(l_bin)
+        l_geo = shapely.wkt.loads(l_geo)
+
+        _, r_geo = self.decompress(r_bin)
+        r_geo = shapely.wkt.loads(r_geo)
+        shapely.intersection(l_geo, r_geo)
+        t = time.perf_counter()
+        return t - s, []
 
 
 def main():
