@@ -35,24 +35,21 @@ class Wkt(CompressionAlgorithm):
 
     def vertices(self, bin):
         s = time.perf_counter()
-        decomp_geom = bin.decode('utf-8')
-        geometry = shapely.wkt.loads(decomp_geom)
+        _, geometry = self.decompress(bin)
         coords = shapely.get_coordinates(geometry)
         t = time.perf_counter()
         return t - s, coords
 
     def type(self, bin): 
         s = time.perf_counter()
-        decomp_geom = bin.decode('utf-8')
-        geometry = shapely.wkt.loads(decomp_geom)
+        _, geometry = self.decompress(bin)
         type = geometry.geom_type
         t = time.perf_counter()
         return t - s, type
     
     def bounding_box(self, bin):
         s = time.perf_counter()
-        decomp_geom = bin.decode('utf-8')
-        geometry = shapely.wkt.loads(decomp_geom)
+        _, geometry = self.decompress(bin)
         bounds = shapely.bounds(geometry)
         t = time.perf_counter()
         return t - s, bounds
@@ -60,8 +57,7 @@ class Wkt(CompressionAlgorithm):
     def add_vertex(self, args):
         bin, idx, pos = args
         s = time.perf_counter()
-        decomp_geom = bin.decode('utf-8')
-        geometry = shapely.wkt.loads(decomp_geom)
+        _, geometry = self.decompress(bin)
         _, bin = self.compress(geometry)
         t = time.perf_counter()
         return t - s, bin

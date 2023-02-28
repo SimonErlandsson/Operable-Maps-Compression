@@ -13,7 +13,7 @@ import time
 import numpy as np
 
 
-class SetAsideCompression(CompressionAlgorithm):
+class WkbComp(CompressionAlgorithm):
 
     def compress(self, geometry):
         #Convert the geometry category names to numbers for smaller space (COMMENTED OUT FOR NOW) <- REF 1
@@ -24,25 +24,17 @@ class SetAsideCompression(CompressionAlgorithm):
 
         #Create pre computed values to store as metadata
         s = time.perf_counter()
-        geo_type = geometry.geom_type #self.num_to_type[geometry.geom_type] <- FOR REF 1
-        geo_vert_count = shapely.count_coordinates(geometry)
-        geo_area = shapely.area(geometry)
-        geo_length = shapely.length(geometry)
-
-        #Write the metadata data for the operations as a special file per geometry
-        content = (bytes(str(geo_type) + "\t" + str(geo_vert_count) + "\t" + str(geo_area) + "\t" + str(geo_length) + "\n", 'utf-8'))
-
+        
         #Write the compressed geometry
-        content += gzip.compress(bytes(str(geometry), 'utf-8'))
+        content = gzip.compress(shapely.to_wkb(geometry))
         t = time.perf_counter()
         return t - s, content
     
 
     def decompress(self, bin):
         s = time.perf_counter()
-        data = bin.split(b'\n', 1)[1] # Split at newline byte
-        decomp_geom = gzip.decompress(data).decode('utf-8') # Decompressing data
-        geometry = shapely.wkt.loads(decomp_geom)
+        decomp_geom = gzip.decompress(bin) # Decompressing data
+        geometry = shapely.wkb.loads(decomp_geom)
         t = time.perf_counter()
         return t - s, geometry     
 
@@ -51,24 +43,21 @@ class SetAsideCompression(CompressionAlgorithm):
 
     def vertices(self, bin):
         s = time.perf_counter()
-        data = bin.split(b'\n', 1)[1] # Split at newline byte
-        decomp_geom = gzip.decompress(data).decode('utf-8')
-        geometry = shapely.wkt.loads(decomp_geom)
+        _, geometry = self.decompress(bin)
         coords = shapely.get_coordinates(geometry)
         t = time.perf_counter()
         return t - s, coords
 
     def type(self, bin): 
         s = time.perf_counter()
-        data = str(bin.split(b'\t', 1)[0], 'utf-8') # Split at \t
+        _, geometry = self.decompress(bin)
+        type = geometry.geom_type
         t = time.perf_counter()
-        return t - s, data 
+        return t - s, type
     
     def bounding_box(self, bin):
         s = time.perf_counter()
-        data = bin.split(b'\n', 1)[1] # Split at newline byte
-        decomp_geom = gzip.decompress(data).decode('utf-8')
-        geometry = shapely.wkt.loads(decomp_geom)
+        _, geometry = self.decompress(bin)
         bounds = shapely.bounds(geometry)
         t = time.perf_counter()
         return t - s, bounds
@@ -76,8 +65,7 @@ class SetAsideCompression(CompressionAlgorithm):
     def add_vertex(self, args):
         bin, idx, pos = args
         s = time.perf_counter()
-        data = bin.split(b'\n', 1)[1] # Split at newline byte
-        decomp_geom = gzip.decompress(data).decode('utf-8')
+        decomp_geom = gzip.decompress(bin)
         # 0 1
         # level = -1
         # current_nest = 0
@@ -104,7 +92,7 @@ class SetAsideCompression(CompressionAlgorithm):
         
 
 
-        geometry = shapely.wkt.loads(decomp_geom)
+        geometry = shapely.wkb.loads(decomp_geom)
         #coords = shapely.union(geometry, shapely.Point(2.01, 3.03))
         #print(np.shape(coords))
 
