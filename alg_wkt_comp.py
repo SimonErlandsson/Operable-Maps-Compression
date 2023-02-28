@@ -26,7 +26,7 @@ class WktComp(CompressionAlgorithm):
         s = time.perf_counter()
         
         #Write the compressed geometry
-        content = gzip.compress(bytes(shapely.to_wkt(geometry), 'utf-8'))
+        content = gzip.compress(bytes(shapely.to_wkt(geometry, rounding_precision=-1), 'utf-8'))
         t = time.perf_counter()
         return t - s, content
     
@@ -66,6 +66,50 @@ class WktComp(CompressionAlgorithm):
         bin, idx, pos = args
         s = time.perf_counter()
         _, geometry = self.decompress(bin)
+        if geometry.geom_type == "LineString":
+            pass
+            #print(shapely.get_coordinates(geometry))
+        elif geometry.geom_type == "Polygon":
+            pass
+        elif geometry.geom_type == "MultiPolygon":
+            pass
+        # 0 1
+        # level = -1
+        # current_nest = 0
+        # for c_idx, char in enumerate(decomp_geom):
+        #     if char == '(':
+        #         level += 1
+        #     elif char == ')':
+        #         level -= 1
+            
+        #     if level == current_nest:
+        #         if idx[level] == 0: # Done with this level, go deeper
+        #             current_nest += 1        
+        #         else:
+        #             idx[level] -= 1
+
+        #     if current_nest == len(idx) - 1:
+        #         if idx[level] == 0: # Found insert point
+        #             insert(c_idx)
+        #         elif char == ',':
+        #             idx[level] -= 1
+
+        #arr = [ [ (2,1), (2,3) ], [ (2,5), (2,5) ] ]
+
+        
+
+
+        #coords = shapely.union(geometry, shapely.Point(2.01, 3.03))
+        #print(np.shape(coords))
+
+        #print(coords)
+        #coords = np.insert(coords, idx, [0.5, 2.0], axis=0)
+        #print(np.shape(coords))
+        #print(coords)
+        #geometry = shapely.set_coordinates(geometry, coords)
+        #print(geometry)
+
+
         _, bin = self.compress(geometry)
         t = time.perf_counter()
         return t - s, bin
@@ -90,11 +134,12 @@ class WktComp(CompressionAlgorithm):
 
 
 def main():
-    x = SetAsideCompression()
-    geom = shapely.wkt.loads("POLYGON ((13.1635138 55.7053599, 13.1637569 55.7053536, 13.1635571 55.705336, 13.1635158 55.7053284, 13.1635184 55.7053437, 13.1635138 55.7053599), (13.1667021 55.7046362, 13.1667117 55.7046498, 13.1667021 55.7046362))")
+    x = WktComp()
+    #geom = shapely.wkt.loads("POLYGON ((13.1635138 55.7053599, 13.1637569 55.7053536, 13.1635571 55.705336, 13.1635158 55.7053284, 13.1635184 55.7053437, 13.1635138 55.7053599), (13.1667021 55.7046362, 13.1667117 55.7046498, 13.1667021 55.7046362))")
+    geom = shapely.wkt.loads("LINESTRING (13.1635138 55.7053599, 13.1637569 55.7053536, 13.1635571 55.705336, 13.1635158 55.7053284, 13.1635184 55.7053437, 13.1635138 55.7053599), (13.1667021 55.7046362, 13.1667117 55.7046498, 13.1667021 55.7046362)")
     t, bin = x.compress(geom)
     x.add_vertex((bin, [0,1], (24.5, 12.3)))
-    print(geom)
+#    print(geom)
 
 
 if __name__ == "__main__":
