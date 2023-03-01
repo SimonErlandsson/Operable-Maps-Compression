@@ -33,7 +33,7 @@ class MetaWkt(CompressionAlgorithm):
         content = (bytes(str(geo_type) + "\t" + str(geo_vert_count) + "\t" + str(geo_area) + "\t" + str(geo_length) + "\n", 'utf-8'))
 
         #Write the compressed geometry
-        content += gzip.compress(bytes(str(geometry), 'utf-8'))
+        content += gzip.compress(bytes(shapely.to_wkt(geometry, rounding_precision=-1), 'utf-8'))
         t = time.perf_counter()
         return t - s, content
     
@@ -74,42 +74,7 @@ class MetaWkt(CompressionAlgorithm):
         s = time.perf_counter()
         data = bin.split(b'\n', 1)[1] # Split at newline byte
         decomp_geom = gzip.decompress(data).decode('utf-8')
-        # 0 1
-        # level = -1
-        # current_nest = 0
-        # for c_idx, char in enumerate(decomp_geom):
-        #     if char == '(':
-        #         level += 1
-        #     elif char == ')':
-        #         level -= 1
-            
-        #     if level == current_nest:
-        #         if idx[level] == 0: # Done with this level, go deeper
-        #             current_nest += 1        
-        #         else:
-        #             idx[level] -= 1
-
-        #     if current_nest == len(idx) - 1:
-        #         if idx[level] == 0: # Found insert point
-        #             insert(c_idx)
-        #         elif char == ',':
-        #             idx[level] -= 1
-
-        #arr = [ [ (2,1), (2,3) ], [ (2,5), (2,5) ] ]
-
-        
-
-
         geometry = shapely.wkt.loads(decomp_geom)
-        #coords = shapely.union(geometry, shapely.Point(2.01, 3.03))
-        #print(np.shape(coords))
-
-        #print(coords)
-        #coords = np.insert(coords, idx, [0.5, 2.0], axis=0)
-        #print(np.shape(coords))
-        #print(coords)
-        #geometry = shapely.set_coordinates(geometry, coords)
-        #print(geometry)
         _, bin = self.compress(geometry)
         t = time.perf_counter()
         return t - s, bin
