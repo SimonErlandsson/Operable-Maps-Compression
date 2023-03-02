@@ -55,10 +55,20 @@ class Wkt(CompressionAlgorithm):
         return t - s, bounds
     
     def add_vertex(self, args):
-        bin, idx, pos = args
+        bin, insert_idx, pos = args
         s = time.perf_counter()
-        _, geometry = self.decompress(bin)
-        _, bin = self.compress(geometry)
+        
+        wkt = bin.decode('utf-8') # Decompressing data
+        point_idx = 0
+        for c_idx, char in enumerate(wkt):
+            if char == ',':
+                if insert_idx == point_idx:
+                    insert_string = f', {pos[0]} {pos[1]}'
+                    wkt = wkt[:c_idx] + insert_string + wkt[c_idx:]
+                    break
+                point_idx += 1
+        bin = bytes(wkt, 'utf-8')
+
         t = time.perf_counter()
         return t - s, bin
     
