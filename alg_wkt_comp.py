@@ -68,13 +68,15 @@ class WktComp(CompressionAlgorithm):
 
         wkt = gzip.decompress(bin).decode('utf-8') # Decompressing data
         point_idx = 0
+        prev = ''
         for c_idx, char in enumerate(wkt):
-            if char == ',':
+            if char == ',' and prev != ')':
                 if insert_idx == point_idx:
                     insert_string = f', {pos[0]} {pos[1]}'
                     wkt = wkt[:c_idx] + insert_string + wkt[c_idx:]
                     break
                 point_idx += 1
+            prev = char
         bin = gzip.compress(bytes(wkt, 'utf-8')) 
 
         t = time.perf_counter()
@@ -108,23 +110,25 @@ def main():
     geom = shapely.wkt.loads("LINESTRING (13.1635138 55.7053599, 13.1637569 55.7053536, 13.1635571 55.705336, 13.1635158 55.7053284, 13.1635184 55.7053437, 13.1635138 55.7053599), (13.1667021 55.7046362, 13.1667117 55.7046498, 13.1667021 55.7046362)")
     t, bin = x.compress(geom)
     _, v = x.vertices(bin)
-    add_idx = random.randint(0, len(v) - 1)
-    add_point = (v[add_idx][0] + random.randint(-25, 25) * 0.00001, v[add_idx][1] + random.randint(-25, 25) * 0.00001)
-    _, add_bin = x.add_vertex((bin, add_idx, (add_point)))
-    print(add_point, add_idx)
-    #t, bin = x.add_vertex((bin, 3, (24.5, 12.3)))
-    t, add_geom = x.decompress(add_bin)
-    wkt = shapely.to_wkt(geom)
-    print(wkt)
+    print(v)
+    #add_idx = random.randint(0, len(v) - 1)
+    #add_point = (v[add_idx][0] + random.randint(-25, 25) * 0.00001, v[add_idx][1] + random.randint(-25, 25) * 0.00001)
+    #_, add_bin = x.add_vertex((bin, add_idx, (add_point)))
+    _, add_bin = x.add_vertex((bin, 2, (0.2, 0.3)))
+    # print(add_point, add_idx)
+    # #t, bin = x.add_vertex((bin, 3, (24.5, 12.3)))
+    # t, add_geom = x.decompress(add_bin)
+    #wkt = shapely.to_wkt(geom)
+    # print(wkt)
     _, v = x.vertices(add_bin)
     print(v)
-    _, v = x.vertices(add_bin)
+    # _, v = x.vertices(add_bin)
 
-    p = gpd.GeoSeries(geom)
-    p.plot()
-    p = gpd.GeoSeries(add_geom)
-    p.plot()
-    plt.show()
+    # p = gpd.GeoSeries(geom)
+    # p.plot()
+    # p = gpd.GeoSeries(add_geom)
+    # p.plot()
+    # plt.show()
       
 
 if __name__ == "__main__":
