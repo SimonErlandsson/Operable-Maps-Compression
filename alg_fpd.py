@@ -1,5 +1,6 @@
 
 from base import CompressionAlgorithm
+from pympler import asizeof
 import shapely
 import shapely.wkt
 import time
@@ -26,6 +27,7 @@ class Fpd(CompressionAlgorithm):
         
 
     def fp_delta_encoding(self, geometry, delta_size, chunk_size):
+        total_est_size = 0
         coords = shapely.get_coordinates(geometry)
 
         #State of the current coordiate pair
@@ -48,6 +50,7 @@ class Fpd(CompressionAlgorithm):
         #Add bounding box
         for bound in geometry.bounds: #Always two coordinates to O(1)
             res.append(bound)
+            total_est_size += sys.getsizeof(bound)
 
         #Loop all coordinates
         for i in range(total_coords):
@@ -58,10 +61,14 @@ class Fpd(CompressionAlgorithm):
                 #save chunk size and later change if reset occurs
                 chunk_size_idx = len(res)
                 res.append(chunk_size)
+                total_est_size += sys.getsizeof(bound)
+
 
                 #Add full coordinates
                 current_chunk_x.append(coords[i][0])
                 current_chunk_y.append(coords[i][1])
+                total_est_size += sys.getsizeof(coords[i][0]) + sys.getsizeof(coords[i][1])
+
                 delta_nbr += 1
 
             else: #Loop for delta
@@ -75,6 +82,7 @@ class Fpd(CompressionAlgorithm):
                     delta_bytes_y = zig_delta_y.to_bytes(delta_size, 'big')
                     current_chunk_x.append(delta_bytes_x)
                     current_chunk_y.append(delta_bytes_y)
+                    total_est_size += delta_size * 2
                     delta_nbr += 1
                      
                 else:
@@ -92,6 +100,8 @@ class Fpd(CompressionAlgorithm):
                     #Add full coordinates
                     current_chunk_x.append(coords[i][0])
                     current_chunk_y.append(coords[i][1])
+                    total_est_size += sys.getsizeof(coords[i][0]) + sys.getsizeof(coords[i][1])
+
                     delta_nbr = 1
 
                 if delta_nbr == chunk_size:
@@ -104,24 +114,25 @@ class Fpd(CompressionAlgorithm):
                     #Reset current chunk state
                     current_chunk_x.clear()
                     current_chunk_y.clear()
-        if delta_nbr > 0:
 
+        if delta_nbr > 0:
             res += current_chunk_x
             res += current_chunk_y
             res[chunk_size_idx] = delta_nbr
 
 
-        return res, sys.getsizeof(res)
+        return res, total_est_size
 
 
 
 
     def getMinimumDeltaSize(self, geometry):
-        delta_sizes  = [1]
+        delta_sizes  = [1,2,3,4,5,6,7,8]
         res_sizes = []
         for delta_size in delta_sizes:
             _, variable_size = self.fp_delta_encoding(geometry, delta_size, 10)
             res_sizes.append(variable_size)
+        print(res_sizes)
         return delta_sizes[res_sizes.index(min(res_sizes))]
 
         
