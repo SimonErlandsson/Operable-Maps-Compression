@@ -27,7 +27,6 @@ class Fpd(CompressionAlgorithm):
 
     def fp_delta_encoding(self, geometry, delta_size, chunk_size):
         coords = shapely.get_coordinates(geometry)
-        variable_size = 0
 
         #State of the current coordiate pair
         delta_nbr = 0 
@@ -40,8 +39,11 @@ class Fpd(CompressionAlgorithm):
         #Arrays for storing current chunk state
         current_chunk_x = []
         current_chunk_y = []
+
+        #Used for changing the chunk_size of reset occurs
         chunk_size_idx = 0
 
+        #----FIRST HEADER INFORMATION(TOTAL_SIZE + BOUNDING BOX)
         res.append(total_coords)
         #Add bounding box
         for bound in geometry.bounds: #Always two coordinates to O(1)
@@ -49,22 +51,17 @@ class Fpd(CompressionAlgorithm):
 
         #Loop all coordinates
         for i in range(total_coords):
-
-            #For all chunks beginnings
+            #print(current_chunk_x, " : ", current_chunk_y, " : ", res) GOOD FOR DEBUGGING
+            #----RESET CHUNK HEADER INFORMATION (CHUNK SIZE, FULL FIRST COORDINATES)
+            #Loop occur when delta_nbr has reached its max of chunk_size
             if delta_nbr == 0:
                 #save chunk size and later change if reset occurs
                 chunk_size_idx = len(res)
                 res.append(chunk_size)
-                variable_size += 32 #Assuming int32 chunksize
-
-                #Reset current chunk state
-                current_chunk_x.clear()
-                current_chunk_y.clear()
 
                 #Add full coordinates
                 current_chunk_x.append(coords[i][0])
                 current_chunk_y.append(coords[i][1])
-                variable_size += 32 * 2 #Assuming float32 bits
                 delta_nbr += 1
 
             else: #Loop for delta
@@ -73,50 +70,58 @@ class Fpd(CompressionAlgorithm):
               
                 zig_delta_x:int = self.zz_encode(delta_x)
                 zig_delta_y:int = self.zz_encode(delta_y)
-                
-                if math.log2(zig_delta_x) <= delta_size and math.log2(zig_delta_y) <= delta_size:
+                if math.log2(zig_delta_x) <= delta_size * 8 and math.log2(zig_delta_y) <= delta_size * 8:
                     delta_bytes_x = zig_delta_x.to_bytes(delta_size, 'big')
                     delta_bytes_y = zig_delta_y.to_bytes(delta_size, 'big')
                     current_chunk_x.append(delta_bytes_x)
                     current_chunk_y.append(delta_bytes_y)
                     delta_nbr += 1
-                    variable_size += delta_size * 2 * 8
                      
                 else:
+
                     res[chunk_size_idx] = delta_nbr
+                    
+                    res += current_chunk_x
+                    res += current_chunk_y
+                    #Reset current chunk state
+                    current_chunk_x.clear()
+                    current_chunk_y.clear()
+                    
                     chunk_size_idx = len(res)
                     res.append(chunk_size)
-                    variable_size += 32 #Assuming int32 chunksize
+                    #Add full coordinates
+                    current_chunk_x.append(coords[i][0])
+                    current_chunk_y.append(coords[i][1])
+                    delta_nbr = 1
+
+                if delta_nbr == chunk_size:
+                    print("HERE 5")
+
+                    delta_nbr = 0
                     res += current_chunk_x
                     res += current_chunk_y
 
                     #Reset current chunk state
                     current_chunk_x.clear()
                     current_chunk_y.clear()
+        if delta_nbr > 0:
 
-                    #Add full coordinates
-                    current_chunk_x.append(coords[i][0])
-                    current_chunk_y.append(coords[i][1])
-                    variable_size += 32 * 2 #Assuming float32 bits
-                    delta_nbr = 1
+            res += current_chunk_x
+            res += current_chunk_y
+            res[chunk_size_idx] = delta_nbr
 
-                if delta_nbr == self.CHUNK_SIZE:
-                    delta_nbr = 0
-                    res += current_chunk_x
-                    res += current_chunk_y
 
-        return res, variable_size
+        return res, sys.getsizeof(res)
 
 
 
 
     def getMinimumDeltaSize(self, geometry):
-        delta_sizes  = [2,3,4,5,6]
+        delta_sizes  = [1]
         res_sizes = []
         for delta_size in delta_sizes:
             _, variable_size = self.fp_delta_encoding(geometry, delta_size, 10)
             res_sizes.append(variable_size)
-        print(res_sizes)
         return delta_sizes[res_sizes.index(min(res_sizes))]
 
         
@@ -129,10 +134,9 @@ class Fpd(CompressionAlgorithm):
         #Create pre computed values to store as metadata
         s = time.perf_counter()
         optimal_size = self.getMinimumDeltaSize(geometry)
-        print(optimal_size)
-        res, _ = self.fp_delta_encoding(geometry, 4, 10)
+        #res, _ = self.fp_delta_encoding(geometry, 4, 10)
         t = time.perf_counter()
-        return t - s, res
+        return t - s, None
 
 
     def decompress(self, bin):
