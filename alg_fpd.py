@@ -8,15 +8,15 @@ import struct
 import sys
 import math
 class Fpd(CompressionAlgorithm):
+    CHUNK_SIZE = 10
+    OPTIMAL_DELTA_SIZE = 4 #DEFAULT VALUE
 
 #---- HELPER METHODS
     def binary(self, num):
         return ''.join('{:0>8b}'.format(c) for c in struct.pack('!f', num))
     
-    
     def int_repr(self, num):
         return struct.unpack('!i',struct.pack('!f',num))[0]
-    
     
     def int64_to_int16(self, num):
         return int.from_bytes(struct.pack('!h', num), "big")
@@ -36,6 +36,7 @@ class Fpd(CompressionAlgorithm):
     def deltas_fit_in_bytes(self, max_bytes, delta_x, delta_y):
         return math.log2(delta_x) <= max_bytes * 8 and math.log2(delta_y) <= max_bytes * 8
 
+
     def fp_delta_encoding(self, geometry, delta_size, chunk_size):
         coords = shapely.get_coordinates(geometry)
         total_coords = len(coords)
@@ -43,9 +44,9 @@ class Fpd(CompressionAlgorithm):
         #State of the current coordiate pair
         delta_nbr = 0 
         
+
         #State of the current chunk state
-        chunk_xs = []
-        chunk_ys = []
+        chunk_xs, chunk_ys = [], []
         chunk_size_idx = 0  #Used for changing the chunk_size of reset occurs
 
 
@@ -90,8 +91,7 @@ class Fpd(CompressionAlgorithm):
 
                     res[chunk_size_idx] = self.int_to_bytes(delta_nbr)
                     
-                    res += chunk_xs
-                    res += chunk_ys
+                    res += chunk_xs + chunk_ys
                     #Reset current chunk state
                     chunk_xs.clear()
                     chunk_ys.clear()
@@ -106,8 +106,7 @@ class Fpd(CompressionAlgorithm):
 
                 if delta_nbr == chunk_size:
                     delta_nbr = 0
-                    res += chunk_xs
-                    res += chunk_ys
+                    res += chunk_xs + chunk_ys
 
                     #Reset current chunk state
                     chunk_xs.clear()
@@ -117,31 +116,31 @@ class Fpd(CompressionAlgorithm):
             res += chunk_xs
             res += chunk_ys
             res[chunk_size_idx] = self.int_to_bytes(delta_nbr)
+
         res = b''.join(res)
         return res, len(res)
 
 
 
-
-    def getMinimumDeltaSize(self, geometry):
+    def getOptimalDeltaSize(self, geometry):
         delta_sizes  = [1,2,3,4,5,6,7,8]
         res_sizes = []
         for delta_size in delta_sizes:
             _, variable_size = self.fp_delta_encoding(geometry, delta_size, 10)
             res_sizes.append(variable_size)
-        return delta_sizes[res_sizes.index(min(res_sizes))]
+        self.OPTIMAL_DELTA_SIZE = delta_sizes[res_sizes.index(min(res_sizes))]
+        return self.OPTIMAL_DELTA_SIZE
 
         
 
 
 
-    CHUNK_SIZE = 10
     def compress(self, geometry):
 
         #Create pre computed values to store as metadata
         s = time.perf_counter()
-        optimal_size = self.getMinimumDeltaSize(geometry)
-        res, _ = self.fp_delta_encoding(geometry, optimal_size, 10)
+        optimal_size = self.getOptimalDeltaSize(geometry)
+        res, _ = self.fp_delta_encoding(geometry, optimal_size, self.CHUNK_SIZE)
         t = time.perf_counter()
         return t - s, res
 
