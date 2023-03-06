@@ -17,111 +17,108 @@ class Fpd(CompressionAlgorithm):
     def int_repr(self, num):
         return struct.unpack('!i',struct.pack('!f',num))[0]
     
-
+    
     def int64_to_int16(self, num):
         return int.from_bytes(struct.pack('!h', num), "big")
     
+    def float_to_bytes(self, x):
+        return struct.pack("f", x)
+    
+    def int_to_bytes(self, x):
+        return struct.pack('>I', x)
 
     def zz_encode(self,num):
         return -2 * num - 1 if num < 0 else 2 * num
         
+    def get_zz_encoded_delta(self, prev_coord, curr_coord):
+        return self.zz_encode(self.int_repr(curr_coord) - self.int_repr(prev_coord))
+    
+    def deltas_fit_in_bytes(self, max_bytes, delta_x, delta_y):
+        return math.log2(delta_x) <= max_bytes * 8 and math.log2(delta_y) <= max_bytes * 8
 
     def fp_delta_encoding(self, geometry, delta_size, chunk_size):
-        total_est_size = 0
         coords = shapely.get_coordinates(geometry)
+        total_coords = len(coords)
 
         #State of the current coordiate pair
         delta_nbr = 0 
+        
+        #State of the current chunk state
+        chunk_xs = []
+        chunk_ys = []
+        chunk_size_idx = 0  #Used for changing the chunk_size of reset occurs
 
-        total_coords = len(coords)
 
         #Array for storing list of full coords, deltas, and metadata.
         res = []
 
-        #Arrays for storing current chunk state
-        current_chunk_x = []
-        current_chunk_y = []
 
-        #Used for changing the chunk_size of reset occurs
-        chunk_size_idx = 0
+        #----FIRST HEADER INFORMATION(TOTAL_SIZE + BOUNDING BOX)----
+        res.append(self.int_to_bytes(total_coords))
 
-        #----FIRST HEADER INFORMATION(TOTAL_SIZE + BOUNDING BOX)
-        res.append(total_coords)
         #Add bounding box
-        for bound in geometry.bounds: #Always two coordinates to O(1)
-            res.append(bound)
-            total_est_size += sys.getsizeof(bound)
+        for bound in geometry.bounds:
+            res.append(self.float_to_bytes(bound))
 
         #Loop all coordinates
         for i in range(total_coords):
-            #print(current_chunk_x, " : ", current_chunk_y, " : ", res) GOOD FOR DEBUGGING
-            #----RESET CHUNK HEADER INFORMATION (CHUNK SIZE, FULL FIRST COORDINATES)
-            #Loop occur when delta_nbr has reached its max of chunk_size
+            
+            #----CHUNK HEADER INFORMATION (CHUNK SIZE, FULL FIRST COORDINATES)
             if delta_nbr == 0:
                 #save chunk size and later change if reset occurs
                 chunk_size_idx = len(res)
-                res.append(chunk_size)
-                total_est_size += sys.getsizeof(bound)
-
+                res.append(self.int_to_bytes(chunk_size))
 
                 #Add full coordinates
-                current_chunk_x.append(coords[i][0])
-                current_chunk_y.append(coords[i][1])
-                total_est_size += sys.getsizeof(coords[i][0]) + sys.getsizeof(coords[i][1])
+                chunk_xs.append(self.float_to_bytes(coords[i][0]))
+                chunk_ys.append(self.float_to_bytes(coords[i][1]))
 
                 delta_nbr += 1
 
             else: #Loop for delta
-                delta_x = self.int_repr(coords[i][0]) - self.int_repr(coords[i - 1][0])
-                delta_y = self.int_repr(coords[i][1]) - self.int_repr(coords[i - 1][1])
-              
-                zig_delta_x:int = self.zz_encode(delta_x)
-                zig_delta_y:int = self.zz_encode(delta_y)
-                if math.log2(zig_delta_x) <= delta_size * 8 and math.log2(zig_delta_y) <= delta_size * 8:
+                zig_delta_x = self.get_zz_encoded_delta(coords[i - 1][0],coords[i][0])
+                zig_delta_y = self.get_zz_encoded_delta(coords[i - 1][1],coords[i][1])
+
+                if self.deltas_fit_in_bytes(delta_size,zig_delta_x,zig_delta_y):
                     delta_bytes_x = zig_delta_x.to_bytes(delta_size, 'big')
                     delta_bytes_y = zig_delta_y.to_bytes(delta_size, 'big')
-                    current_chunk_x.append(delta_bytes_x)
-                    current_chunk_y.append(delta_bytes_y)
-                    total_est_size += delta_size * 2
+                    chunk_xs.append(delta_bytes_x)
+                    chunk_ys.append(delta_bytes_y)
                     delta_nbr += 1
                      
                 else:
 
-                    res[chunk_size_idx] = delta_nbr
+                    res[chunk_size_idx] = self.int_to_bytes(delta_nbr)
                     
-                    res += current_chunk_x
-                    res += current_chunk_y
+                    res += chunk_xs
+                    res += chunk_ys
                     #Reset current chunk state
-                    current_chunk_x.clear()
-                    current_chunk_y.clear()
+                    chunk_xs.clear()
+                    chunk_ys.clear()
                     
                     chunk_size_idx = len(res)
-                    res.append(chunk_size)
+                    res.append(self.int_to_bytes(chunk_size))
                     #Add full coordinates
-                    current_chunk_x.append(coords[i][0])
-                    current_chunk_y.append(coords[i][1])
-                    total_est_size += sys.getsizeof(coords[i][0]) + sys.getsizeof(coords[i][1])
+                    chunk_xs.append(self.float_to_bytes(coords[i][0]))
+                    chunk_ys.append(self.float_to_bytes(coords[i][1]))
 
                     delta_nbr = 1
 
                 if delta_nbr == chunk_size:
-                    print("HERE 5")
-
                     delta_nbr = 0
-                    res += current_chunk_x
-                    res += current_chunk_y
+                    res += chunk_xs
+                    res += chunk_ys
 
                     #Reset current chunk state
-                    current_chunk_x.clear()
-                    current_chunk_y.clear()
+                    chunk_xs.clear()
+                    chunk_ys.clear()
 
         if delta_nbr > 0:
-            res += current_chunk_x
-            res += current_chunk_y
-            res[chunk_size_idx] = delta_nbr
-
-
-        return res, total_est_size
+            res += chunk_xs
+            res += chunk_ys
+            res[chunk_size_idx] = self.int_to_bytes(delta_nbr)
+        res = b''.join(res)
+        return res, len(res)
 
 
 
@@ -132,7 +129,6 @@ class Fpd(CompressionAlgorithm):
         for delta_size in delta_sizes:
             _, variable_size = self.fp_delta_encoding(geometry, delta_size, 10)
             res_sizes.append(variable_size)
-        print(res_sizes)
         return delta_sizes[res_sizes.index(min(res_sizes))]
 
         
@@ -145,9 +141,9 @@ class Fpd(CompressionAlgorithm):
         #Create pre computed values to store as metadata
         s = time.perf_counter()
         optimal_size = self.getMinimumDeltaSize(geometry)
-        #res, _ = self.fp_delta_encoding(geometry, 4, 10)
+        res, _ = self.fp_delta_encoding(geometry, optimal_size, 10)
         t = time.perf_counter()
-        return t - s, None
+        return t - s, res
 
 
     def decompress(self, bin):
