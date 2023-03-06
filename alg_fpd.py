@@ -1,6 +1,5 @@
 
 from base import CompressionAlgorithm
-from pympler import asizeof
 from collections import deque
 import shapely
 import shapely.wkt
@@ -39,33 +38,18 @@ class Fpd(CompressionAlgorithm):
     def deltas_fit_in_bytes(self, max_bytes, delta_x, delta_y):
         return math.log2(delta_x) <= max_bytes * 8 and math.log2(delta_y) <= max_bytes * 8
 
-
-
-    def fp_delta_encoding(self, geometry, delta_size, chunk_size):
-        coords = shapely.get_coordinates(geometry)
-
-        #Saves interior and exterior lengths if polygon type
+    def get_poly_ring_count(self, geometry):
         subpoly_coord_count = deque([])
         if geometry.geom_type == "Polygon" or geometry.geom_type == "MultiPolygon":
             subpoly_coord_count.append(len(geometry.exterior.coords))
             for i in range(len(geometry.interiors)):
                 subpoly_coord_count.append(len(geometry.interiors[i].coords))
+        return subpoly_coord_count
 
-        #General state
-        total_coords = len(coords)            
 
-        #State of the current chunk state
-        chunk_xs, chunk_ys = [], []
-        chunk_size_idx = 0  #Used for changing the chunk_size of reset occurs
-
-        #State of the current coordiate pair
-        delta_nbr = 0
-        
-        #Array for storing list of full coords, deltas, and metadata.
+    def initialize_bytearray(self, geometry, delta_size, chunk_size):
         res = []
-
-        #----FIRST HEADER INFORMATION(TOTAL_SIZE + BOUNDING BOX, Geometry type, (POSSIBLE inner ring structure))----
-        
+        total_coords = len(shapely.get_coordinates(geometry))  
         # Operation metadata
         res.append(self.int_to_bytes(total_coords))
         #Add bounding box
@@ -76,20 +60,40 @@ class Fpd(CompressionAlgorithm):
         res.append(self.int_to_bytes(delta_size))
         res.append(self.int_to_bytes(chunk_size))
         res.append(self.type_int_convertion[geometry.geom_type].to_bytes(1, 'big')) #1 byte is enought for storing type
+        return res
 
+
+    def fp_delta_encoding(self, geometry, delta_size, chunk_size):
+        coords = shapely.get_coordinates(geometry)
+
+        #Saves interior and exterior lengths if polygon type
+        subpoly_coord_count:deque = self.get_poly_ring_count(geometry)
+    
+        #State of the current chunk state
+        chunk_xs, chunk_ys = [], []
+        chunk_size_idx = 0  #Used for changing the chunk_size of reset occurs
+
+        #State of the current coordiate pair
+        delta_nbr = 0
+        
+        #Array for storing list resulting bytes. Initialized with Total coordinates, bounding box, delta_size, chunk_size, geom_type
+        res = self.initialize_bytearray(geometry,  delta_size, chunk_size)
+
+        #Polygon specific variables        
         is_polygon = len(subpoly_coord_count) != 0
         subpoly_cntdown = 0
 
         #Loop all coordinates
-        for i in range(total_coords):
-
+        for i in range(len(coords)):
             if is_polygon and subpoly_cntdown == 0:
-                res[chunk_size_idx] = self.int_to_bytes(delta_nbr)
-                delta_nbr = 0
-                res += chunk_xs + chunk_ys
-                chunk_xs.clear()
-                chunk_ys.clear()
-                
+                #Reset and store previous chunk data if interrupted in the middle of a chunk
+                if(len(chunk_xs) != 0):
+                    res[chunk_size_idx] = self.int_to_bytes(delta_nbr)
+                    delta_nbr = 0
+                    res += chunk_xs + chunk_ys
+                    chunk_xs.clear()
+                    chunk_ys.clear()
+                    
                 subpoly_cntdown = subpoly_coord_count.popleft()
                 res.append(self.int_to_bytes(subpoly_cntdown))
 
@@ -170,8 +174,6 @@ class Fpd(CompressionAlgorithm):
             res_sizes.append(variable_size)
         self.OPTIMAL_DELTA_SIZE = delta_sizes[res_sizes.index(min(res_sizes))]
         return self.OPTIMAL_DELTA_SIZE
-
-        
 
 
 
