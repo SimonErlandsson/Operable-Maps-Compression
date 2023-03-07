@@ -45,9 +45,31 @@ class Fpd(CompressionAlgorithm):
             for i in range(len(geometry.interiors)):
                 subpoly_coord_count.append(len(geometry.interiors[i].coords))
         return subpoly_coord_count
+    
+    def init_chunk(self, res, chk_size, coords, pnt_idx, chk_ys, chk_xs):
+        chk_size_idx = len(res)
+        res.append(self.int_to_bytes(chk_size))
+
+        #Add full coordinates
+        chk_xs.append(self.float_to_bytes(coords[pnt_idx][0]))
+        chk_ys.append(self.float_to_bytes(coords[pnt_idx][1]))
+        return chk_size_idx
 
 
-    def initialize_bytearray(self, geometry, delta_size, chk_size):
+    def save_clear_state(self,res, chk_xs, chk_ys):
+        res += chk_xs + chk_ys
+        #Reset current chk state
+        chk_xs.clear()
+        chk_ys.clear()
+
+    def append_delta_pair(self, chk_xs, chk_ys, deltax, deltay, delta_size):
+        delta_bytes_x = deltax.to_bytes(delta_size, 'big')
+        delta_bytes_y = deltay.to_bytes(delta_size, 'big')
+        chk_xs.append(delta_bytes_x)
+        chk_ys.append(delta_bytes_y)
+
+
+    def init_bytearray(self, geometry, delta_size, chk_size):
         res = []
         total_coords = len(shapely.get_coordinates(geometry))  
         # Operation metadata
@@ -77,7 +99,7 @@ class Fpd(CompressionAlgorithm):
         chk_point_nbr = 0
         
         #Array for storing list resulting bytes. Initialized with Total coordinates, bounding box, delta_size, chk_size, geom_type
-        res = self.initialize_bytearray(geometry,  delta_size, max_chk_size)
+        res = self.init_bytearray(geometry,  delta_size, chk_size)
 
         #Polygon specific variables        
         is_polygon = len(subpoly_coord_count) != 0
@@ -90,9 +112,8 @@ class Fpd(CompressionAlgorithm):
                 if(len(chk_xs) != 0):
                     res[chk_size_idx] = self.int_to_bytes(chk_point_nbr)
                     chk_point_nbr = 0
-                    res += chk_xs + chk_ys
-                    chk_xs.clear()
-                    chk_ys.clear()
+                    self.save_clear_state(res, chk_xs, chk_ys)
+
 
                 subpoly_point_cnt = subpoly_coord_count.popleft()
                 res.append(self.int_to_bytes(subpoly_point_cnt))
@@ -101,14 +122,7 @@ class Fpd(CompressionAlgorithm):
             #----CHUNK HEADER INFORMATION (CHUNK SIZE, FULL FIRST COORDINATES)
             if chk_point_nbr == 0:
                 #save chk size and later change if reset occurs
-
-                chk_size_idx = len(res)
-                res.append(self.int_to_bytes(max_chk_size))
-
-                #Add full coordinates
-                chk_xs.append(self.float_to_bytes(coords[i][0]))
-                chk_ys.append(self.float_to_bytes(coords[i][1]))
-
+                chk_size_idx = self.init_chunk(res, chk_size, coords, i, chk_ys, chk_xs)
                 chk_point_nbr += 1
 
             else: #Loop for delta
@@ -116,39 +130,24 @@ class Fpd(CompressionAlgorithm):
                 zig_delta_y = self.get_zz_encoded_delta(coords[i - 1][1],coords[i][1])
 
                 if self.deltas_fit_in_bytes(delta_size,zig_delta_x,zig_delta_y):
-                    delta_bytes_x = zig_delta_x.to_bytes(delta_size, 'big')
-                    delta_bytes_y = zig_delta_y.to_bytes(delta_size, 'big')
-                    chk_xs.append(delta_bytes_x)
-                    chk_ys.append(delta_bytes_y)
+                    self.append_delta_pair(chk_xs, chk_ys, zig_delta_x, zig_delta_y, delta_size)
                     chk_point_nbr += 1
                     
                 else:
                     res[chk_size_idx] = self.int_to_bytes(chk_point_nbr)
-                    
-                    res += chk_xs + chk_ys
-                    #Reset current chk state
-                    chk_xs.clear()
-                    chk_ys.clear()
-                    
-                    chk_size_idx = len(res)
-                    res.append(self.int_to_bytes(max_chk_size))
-                    #Add full coordinates
-                    chk_xs.append(self.float_to_bytes(coords[i][0]))
-                    chk_ys.append(self.float_to_bytes(coords[i][1]))
+                    self.save_clear_state(res, chk_xs, chk_ys)
+                    chk_size_idx = self.init_chunk(res, chk_size, coords, i, chk_ys, chk_xs)
 
                     chk_point_nbr = 1
 
                 if chk_point_nbr == max_chk_size:
                     chk_point_nbr = 0
-                    res += chk_xs + chk_ys
+                    self.save_clear_state(res, chk_xs, chk_ys)
 
-                    #Reset current chk state
-                    chk_xs.clear()
-                    chk_ys.clear()
             subpoly_point_cnt -= 1
 
         if chk_point_nbr > 0:
-            res += chk_xs + chk_ys
+            self.save_clear_state(res, chk_xs, chk_ys)
             res[chk_size_idx] = self.int_to_bytes(chk_point_nbr)
 
         res = b''.join(res)
