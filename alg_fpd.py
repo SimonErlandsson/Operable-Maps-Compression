@@ -8,7 +8,7 @@ import struct
 import sys
 import math
 class Fpd(CompressionAlgorithm):
-    CHUNK_SIZE = 10
+    MAX_CHUNK_SIZE = 10
     OPTIMAL_DELTA_SIZE = 4 #DEFAULT VALUE
     type_int_convertion = {"Point": 0, "LineString": 1, "Polygon": 2, "MultiPolygon": 3, "MultiLineString": 4, "MultiPoint": 5, "LinearRing": 6, 
                   0: "Point", 1: "LineString", 2: "Polygon", 3: "MultiPolygon", 4: "MultiLineString", 5: "MultiPoint", 6: "LinearRing"} 
@@ -63,7 +63,7 @@ class Fpd(CompressionAlgorithm):
         return res
 
 
-    def fp_delta_encoding(self, geometry, delta_size, chk_size):
+    def fp_delta_encoding(self, geometry, max_chk_size, delta_size):
         coords = shapely.get_coordinates(geometry)
 
         #Saves interior and exterior lengths if polygon type
@@ -77,7 +77,7 @@ class Fpd(CompressionAlgorithm):
         chk_point_nbr = 0
         
         #Array for storing list resulting bytes. Initialized with Total coordinates, bounding box, delta_size, chk_size, geom_type
-        res = self.initialize_bytearray(geometry,  delta_size, chk_size)
+        res = self.initialize_bytearray(geometry,  delta_size, max_chk_size)
 
         #Polygon specific variables        
         is_polygon = len(subpoly_coord_count) != 0
@@ -103,7 +103,7 @@ class Fpd(CompressionAlgorithm):
                 #save chk size and later change if reset occurs
 
                 chk_size_idx = len(res)
-                res.append(self.int_to_bytes(chk_size))
+                res.append(self.int_to_bytes(max_chk_size))
 
                 #Add full coordinates
                 chk_xs.append(self.float_to_bytes(coords[i][0]))
@@ -131,14 +131,14 @@ class Fpd(CompressionAlgorithm):
                     chk_ys.clear()
                     
                     chk_size_idx = len(res)
-                    res.append(self.int_to_bytes(chk_size))
+                    res.append(self.int_to_bytes(max_chk_size))
                     #Add full coordinates
                     chk_xs.append(self.float_to_bytes(coords[i][0]))
                     chk_ys.append(self.float_to_bytes(coords[i][1]))
 
                     chk_point_nbr = 1
 
-                if chk_point_nbr == chk_size:
+                if chk_point_nbr == max_chk_size:
                     chk_point_nbr = 0
                     res += chk_xs + chk_ys
 
@@ -166,15 +166,13 @@ class Fpd(CompressionAlgorithm):
 
 
 
-    def getOptimalDeltaSize(self, geometry):
-        delta_sizes  = [1,2,3,4]
-        res_sizes = []
-        for delta_size in delta_sizes:
-            _, variable_size = self.fp_delta_encoding(geometry, delta_size, self.CHUNK_SIZE)
-            res_sizes.append(variable_size)
-        for i in range(len(delta_sizes)):
-            print("delta size of", delta_sizes[i], "bytes -> total size of geometry:", res_sizes[i], "bytes")
-        self.OPTIMAL_DELTA_SIZE = delta_sizes[res_sizes.index(min(res_sizes))]
+    def calculate_delta_sizes(self, geometry):
+        _, variable_size = self.fp_delta_encoding(geometry, self.MAX_CHUNK_SIZE, delta_size=None)
+        
+        #    res_sizes.append(variable_size)
+        #for i in range(len(delta_sizes)):
+        #    print("delta size of", delta_sizes[i], "bytes -> total size of geometry:", res_sizes[i], "bytes")
+        #self.OPTIMAL_DELTA_SIZE = delta_sizes[res_sizes.index(min(res_sizes))]
         return self.OPTIMAL_DELTA_SIZE
 
 
@@ -184,7 +182,7 @@ class Fpd(CompressionAlgorithm):
         #Create pre computed values to store as metadata
         s = time.perf_counter()
         optimal_size = self.getOptimalDeltaSize(geometry)
-        res, _ = self.fp_delta_encoding(geometry, optimal_size, self.CHUNK_SIZE)
+        res, _ = self.fp_delta_encoding(geometry, optimal_size, self.MAX_CHUNK_SIZE)
         t = time.perf_counter()
         return t - s, res
 
@@ -192,7 +190,7 @@ class Fpd(CompressionAlgorithm):
     def decompress(self, bin):
         res = None
         s = time.perf_counter()
-        res, _ = self.fp_delta_decoding(bin, self.OPTIMAL_DELTA_SIZE, self.CHUNK_SIZE)
+        res, _ = self.fp_delta_decoding(bin, self.OPTIMAL_DELTA_SIZE, self.MAX_CHUNK_SIZE)
         t = time.perf_counter()
         return t - s, res     
 
@@ -200,24 +198,24 @@ class Fpd(CompressionAlgorithm):
 # ---- UNARY ---- #
 
     def vertices(self, bin):
-        res = None
         s = time.perf_counter()
-
+        _, geometry = self.decompress(bin)
+        coords = shapely.get_coordinates(geometry)
         t = time.perf_counter()
-        return t - s, res
-
+        return t - s, coords
 
     def type(self, bin): 
-        res = None
         s = time.perf_counter()
-
-        return t - s, res 
+        _, geometry = self.decompress(bin)
+        type = geometry.geom_type
+        t = time.perf_counter()
     
     def bounding_box(self, bin):
-        res = None
         s = time.perf_counter()
-
-        return t - s, res
+        _, geometry = self.decompress(bin)
+        bounds = shapely.bounds(geometry)
+        t = time.perf_counter()
+        return t - s, bounds
     
     def add_vertex(self, args):
         res = None        
@@ -227,18 +225,20 @@ class Fpd(CompressionAlgorithm):
         return t - s, res
     
     def is_intersecting(self, args):
-        res = None        
         l_bin, r_bin = args
         s = time.perf_counter()
-
+        _, l_geo = self.decompress(l_bin)
+        _, r_geo = self.decompress(r_bin)
+        res = shapely.intersects(l_geo, r_geo)
         t = time.perf_counter()
         return t - s, res
 
     def intersection(self, args):
-        res = None        
         l_bin, r_bin = args
         s = time.perf_counter()
-
+        _, l_geo = self.decompress(l_bin)
+        _, r_geo = self.decompress(r_bin)
+        res = shapely.intersection(l_geo, r_geo)
         t = time.perf_counter()
         return t - s, res
     
