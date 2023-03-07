@@ -47,7 +47,7 @@ class Fpd(CompressionAlgorithm):
         return subpoly_coord_count
 
 
-    def initialize_bytearray(self, geometry, delta_size, chunk_size):
+    def initialize_bytearray(self, geometry, delta_size, chk_size):
         res = []
         total_coords = len(shapely.get_coordinates(geometry))  
         # Operation metadata
@@ -58,58 +58,58 @@ class Fpd(CompressionAlgorithm):
 
         #Meta data
         res.append(self.int_to_bytes(delta_size))
-        res.append(self.int_to_bytes(chunk_size))
+        res.append(self.int_to_bytes(chk_size))
         res.append(self.type_int_convertion[geometry.geom_type].to_bytes(1, 'big')) #1 byte is enought for storing type
         return res
 
 
-    def fp_delta_encoding(self, geometry, delta_size, chunk_size):
+    def fp_delta_encoding(self, geometry, delta_size, chk_size):
         coords = shapely.get_coordinates(geometry)
 
         #Saves interior and exterior lengths if polygon type
         subpoly_coord_count:deque = self.get_poly_ring_count(geometry)
     
-        #State of the current chunk state
-        chunk_xs, chunk_ys = [], []
-        chunk_size_idx = 0  #Used for changing the chunk_size of reset occurs
+        #State of the current chk state
+        chk_xs, chk_ys = [], []
+        chk_size_idx = 0  #Used for changing the chk_size of reset occurs
 
         #State of the current coordiate pair
-        delta_nbr = 0
+        chk_point_nbr = 0
         
-        #Array for storing list resulting bytes. Initialized with Total coordinates, bounding box, delta_size, chunk_size, geom_type
-        res = self.initialize_bytearray(geometry,  delta_size, chunk_size)
+        #Array for storing list resulting bytes. Initialized with Total coordinates, bounding box, delta_size, chk_size, geom_type
+        res = self.initialize_bytearray(geometry,  delta_size, chk_size)
 
         #Polygon specific variables        
         is_polygon = len(subpoly_coord_count) != 0
-        subpoly_cntdown = 0
+        subpoly_point_cnt = 0
 
         #Loop all coordinates
         for i in range(len(coords)):
-            if is_polygon and subpoly_cntdown == 0:
-                #Reset and store previous chunk data if interrupted in the middle of a chunk
-                if(len(chunk_xs) != 0):
-                    res[chunk_size_idx] = self.int_to_bytes(delta_nbr)
-                    delta_nbr = 0
-                    res += chunk_xs + chunk_ys
-                    chunk_xs.clear()
-                    chunk_ys.clear()
-                    
-                subpoly_cntdown = subpoly_coord_count.popleft()
-                res.append(self.int_to_bytes(subpoly_cntdown))
+            if is_polygon and subpoly_point_cnt == 0:
+                #Reset and store previous chk data if interrupted in the middle of a chk
+                if(len(chk_xs) != 0):
+                    res[chk_size_idx] = self.int_to_bytes(chk_point_nbr)
+                    chk_point_nbr = 0
+                    res += chk_xs + chk_ys
+                    chk_xs.clear()
+                    chk_ys.clear()
+
+                subpoly_point_cnt = subpoly_coord_count.popleft()
+                res.append(self.int_to_bytes(subpoly_point_cnt))
 
 
             #----CHUNK HEADER INFORMATION (CHUNK SIZE, FULL FIRST COORDINATES)
-            if delta_nbr == 0:
-                #save chunk size and later change if reset occurs
+            if chk_point_nbr == 0:
+                #save chk size and later change if reset occurs
 
-                chunk_size_idx = len(res)
-                res.append(self.int_to_bytes(chunk_size))
+                chk_size_idx = len(res)
+                res.append(self.int_to_bytes(chk_size))
 
                 #Add full coordinates
-                chunk_xs.append(self.float_to_bytes(coords[i][0]))
-                chunk_ys.append(self.float_to_bytes(coords[i][1]))
+                chk_xs.append(self.float_to_bytes(coords[i][0]))
+                chk_ys.append(self.float_to_bytes(coords[i][1]))
 
-                delta_nbr += 1
+                chk_point_nbr += 1
 
             else: #Loop for delta
                 zig_delta_x = self.get_zz_encoded_delta(coords[i - 1][0],coords[i][0])
@@ -118,39 +118,39 @@ class Fpd(CompressionAlgorithm):
                 if self.deltas_fit_in_bytes(delta_size,zig_delta_x,zig_delta_y):
                     delta_bytes_x = zig_delta_x.to_bytes(delta_size, 'big')
                     delta_bytes_y = zig_delta_y.to_bytes(delta_size, 'big')
-                    chunk_xs.append(delta_bytes_x)
-                    chunk_ys.append(delta_bytes_y)
-                    delta_nbr += 1
+                    chk_xs.append(delta_bytes_x)
+                    chk_ys.append(delta_bytes_y)
+                    chk_point_nbr += 1
                     
                 else:
-                    res[chunk_size_idx] = self.int_to_bytes(delta_nbr)
+                    res[chk_size_idx] = self.int_to_bytes(chk_point_nbr)
                     
-                    res += chunk_xs + chunk_ys
-                    #Reset current chunk state
-                    chunk_xs.clear()
-                    chunk_ys.clear()
+                    res += chk_xs + chk_ys
+                    #Reset current chk state
+                    chk_xs.clear()
+                    chk_ys.clear()
                     
-                    chunk_size_idx = len(res)
-                    res.append(self.int_to_bytes(chunk_size))
+                    chk_size_idx = len(res)
+                    res.append(self.int_to_bytes(chk_size))
                     #Add full coordinates
-                    chunk_xs.append(self.float_to_bytes(coords[i][0]))
-                    chunk_ys.append(self.float_to_bytes(coords[i][1]))
+                    chk_xs.append(self.float_to_bytes(coords[i][0]))
+                    chk_ys.append(self.float_to_bytes(coords[i][1]))
 
-                    delta_nbr = 1
+                    chk_point_nbr = 1
 
-                if delta_nbr == chunk_size:
-                    delta_nbr = 0
-                    res += chunk_xs + chunk_ys
+                if chk_point_nbr == chk_size:
+                    chk_point_nbr = 0
+                    res += chk_xs + chk_ys
 
-                    #Reset current chunk state
-                    chunk_xs.clear()
-                    chunk_ys.clear()
-            subpoly_cntdown -= 1
+                    #Reset current chk state
+                    chk_xs.clear()
+                    chk_ys.clear()
+            subpoly_point_cnt -= 1
 
-        if delta_nbr > 0:
-            res += chunk_xs
-            res += chunk_ys
-            res[chunk_size_idx] = self.int_to_bytes(delta_nbr)
+        if chk_point_nbr > 0:
+            res += chk_xs + chk_ys
+            res[chk_size_idx] = self.int_to_bytes(chk_point_nbr)
+
         res = b''.join(res)
         return res, len(res)
     
@@ -160,18 +160,20 @@ class Fpd(CompressionAlgorithm):
         delta_size = int.from_bytes(bin[0:4],byteorder='big')
         print(delta_size)
         reset_next = True
-        chunk_deltas = 0
+        chk_deltas = 0
 
         return bin, None
 
 
 
     def getOptimalDeltaSize(self, geometry):
-        delta_sizes  = [2]
+        delta_sizes  = [1,2,3,4]
         res_sizes = []
         for delta_size in delta_sizes:
             _, variable_size = self.fp_delta_encoding(geometry, delta_size, self.CHUNK_SIZE)
             res_sizes.append(variable_size)
+        for i in range(len(delta_sizes)):
+            print("delta size of", delta_sizes[i], "bytes -> total size of geometry:", res_sizes[i], "bytes")
         self.OPTIMAL_DELTA_SIZE = delta_sizes[res_sizes.index(min(res_sizes))]
         return self.OPTIMAL_DELTA_SIZE
 
@@ -243,16 +245,8 @@ class Fpd(CompressionAlgorithm):
 def main():
     x = Fpd()
     geom1 = shapely.wkt.loads("POLYGON ((13.1635138 55.7053599, 13.1637569 55.7053536, 13.1635571 55.705336, 13.1635158 55.7053284, 13.1635184 55.7053437, 13.1635138 55.7053599), (13.1667021 55.7046362, 13.1667117 55.7046498, 13.1667021 55.7046362))")
-    geom2 = shapely.wkt.loads("LINESTRING (13.1635138 55.7053599, 13.1637569 55.7053536, 13.1635571 55.705336, 13.1635158 55.7053284)")
-    geom3 = shapely.wkt.loads("POLYGON ((13.1635138 55.7053599, 13.1637569 55.7053536, 13.1635571 55.705336, 13.1635158 55.7053284, 13.1635184 55.7053437, 13.1635138 55.7053599))")
-
-    t, bin1 = x.compress(geom1)
-    print("___")
-    print(bin1)
-    t, bin2 = x.compress(geom2)
-    print("___")
-    print(bin2)
-    t, bin3 = x.compress(geom3)
+   
+    t, bin3 = x.compress(geom1)
     print("___")
     print(bin3)
 
