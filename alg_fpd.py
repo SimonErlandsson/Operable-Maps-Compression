@@ -7,13 +7,12 @@ import time
 import struct
 import sys
 import math
+from shapely import GeometryType as GT
 
 
 class Fpd(CompressionAlgorithm):
     MAX_CHUNK_SIZE = 10
-    OPTIMAL_DELTA_SIZE = 4  # DEFAULT VALUE
-    type_int_convertion = {"Point": 0, "LineString": 1, "Polygon": 2, "MultiPolygon": 3, "MultiLineString": 4, "MultiPoint": 5, "LinearRing": 6,
-                           0: "Point", 1: "LineString", 2: "Polygon", 3: "MultiPolygon", 4: "MultiLineString", 5: "MultiPoint", 6: "LinearRing"}
+    OPTIMAL_DELTA_SIZE = 4  # DEFAULT VALUEß
 
 # ---- HELPER METHODS
     def binary(self, num):
@@ -29,7 +28,7 @@ class Fpd(CompressionAlgorithm):
         return struct.pack("f", x)
 
     def int_to_bytes(self, x):
-        return struct.pack('>I', x)
+        return struct.pack('!I', x)
 
     def zz_encode(self, num):
         return -2 * num - 1 if num < 0 else 2 * num
@@ -86,18 +85,14 @@ class Fpd(CompressionAlgorithm):
 
     def init_bytearray(self, geometry, delta_size):
         res = []
-        # total_coords = len(shapely.get_coordinates(geometry))  
-        # # Operation metadata
-        # res.append(self.int_to_bytes(total_coords))
-        # #Add bounding box
-        # for bound in geometry.bounds:
-        #     res.append(self.float_to_bytes(bound))
-
-        # Meta data
         res.append(self.int_to_bytes(delta_size))
-        res.append(self.type_int_convertion[geometry.geom_type].to_bytes(1, 'big')) #1 byte is enought for storing type
+        res.append(int(shapely.get_type_id(geometry)).to_bytes(1, 'big')) #1 byte is enought for storing type
         return res
-
+    
+    def decode_header(self, bin):
+        delta_size, type = struct.unpack_from('!IB', bin)
+        type = GT(type)
+        return delta_size, type
 
     def polygon_reset(self, res, chk_xs, chk_ys, chk_size_idx, geom_coord_count, chk_point_nbr):
         #Reset and store previous chk data if interrupted in the middle of a chk
@@ -150,7 +145,6 @@ class Fpd(CompressionAlgorithm):
             if chk_point_nbr == 0:
                 #save chk size and later change if reset occurs
                 chk_size_idx = self.init_chunk(res, self.MAX_CHUNK_SIZE, coords, i, chk_ys, chk_xs)
-                chk_point_nbr += 1
 
             else: #Loop for delta
                 zig_delta_x = self.get_zz_encoded_delta(coords[i - 1][0],coords[i][0])
@@ -182,17 +176,57 @@ class Fpd(CompressionAlgorithm):
         return res, len(res)
 
     def fp_delta_decoding(self, bin):
+        geometry = shapely.LineString()
+        delta_size, type = self.decode_header(bin)
+        
+        if type == GT.LINESTRING:
+            pass
+        elif type == GT.POLYGON:
+            pass
+        elif type == GT.MULTIPOLYGON:
+            pass
+
+
         # Remove header information about total nbr of nodes and bounding box
         bin = bin[4 + 4 * 2:]
         delta_size = int.from_bytes(bin[0:4], byteorder='big')
         reset_next = True
         chk_deltas = 0
 
-        return bin, None
+
+        # Parse to shapely object
+        # first retrieve the coordinates from your geojson dictionary
+        #rawcoords = candidate["coordinates"]
+
+        # # define the conversion functionß
+        # def PrepCoordsForShapely(rawcoords):
+        #     preppedcoords = []
+        #     #according to the geojson specs, a multipolygon is a list of linear rings, so we loop each
+        #     for eachpolygon in rawcoords:
+        #         #the first linear ring is the coordinates of the polygon, and shapely needs it to be a tuple
+        #         tupleofcoords = tuple(eachpolygon[0])
+        #         #the remaining linear rings, if any, are the coordinates of inner holes, and shapely needs these to be nested in a list
+        #         if len(eachpolygon) > 1:
+        #             listofholes = list(eachpolygon[1:])
+        #         else:
+        #             listofholes = []
+        #         #shapely defines each polygon in a multipolygon with the polygoon coordinates and the list of holes nested inside a tuple
+        #         eachpreppedpolygon = (tupleofcoords, listofholes)
+        #         #so append each prepped polygon to the final multipolygon list
+        #         preppedcoords.append(eachpreppedpolygon)
+        #     #finally, the prepped coordinates need to be nested inside a list in order to be used as a star-argument for the MultiPolygon constructor.
+        #     return [preppedcoords]
+
+        # # use the function to prepare coordinates for MultiPolygon
+        # preppedcoords = PrepCoordsForShapely(rawcoords)
+        # # use the prepped coordinates as a star-argument for the MultiPolygon constructor
+        # shapelymultipolygon = shapely.MultiPolygon(*preppedcoords)
+
+        return geometry
 
 
 
-    def calculate_delta_sizes(self, geometry):
+    def calculate_delta_size(self, geometry):
          coords = shapely.get_coordinates(geometry)
          prev = [0, 0]
          bit_cnts = {}
@@ -216,9 +250,6 @@ class Fpd(CompressionAlgorithm):
              lower_cnt -= bit_cnts[n]
              upper_cnt += bit_cnts[n]
 
-         #    res_sizes.append(variable_size)
-         # for i in range(len(delta_sizes)):
-         #    print("delta size of", delta_sizes[i], "bytes -> total size of geometry:", res_sizes[i], "bytes")
          self.OPTIMAL_DELTA_SIZE = min(tot_size, key=tot_size.get)
          return self.OPTIMAL_DELTA_SIZE
 
@@ -226,7 +257,7 @@ class Fpd(CompressionAlgorithm):
 
         # Create pre computed values to store as metadata
         s = time.perf_counter()
-        optimal_size = self.calculate_delta_sizes(geometry)
+        optimal_size = self.calculate_delta_size(geometry)
         if optimal_size % 8 != 0:
             optimal_size += 8
         optimal_size /= 8
@@ -237,12 +268,10 @@ class Fpd(CompressionAlgorithm):
         return t - s, res
 
     def decompress(self, bin):
-        res = None
         s = time.perf_counter()
-        res, _ = self.fp_delta_decoding(
-            bin, self.OPTIMAL_DELTA_SIZE, self.MAX_CHUNK_SIZE)
+        geometry = self.fp_delta_decoding(bin)
         t = time.perf_counter()
-        return t - s, res
+        return t - s, geometry
 
 
 # ---- UNARY ---- #
@@ -297,9 +326,9 @@ def main():
     x = Fpd()
     geom1 = shapely.wkt.loads("MULTIPOLYGON (((13.1910341 55.7064716, 13.1909909 55.7064777, 13.1903007 55.7065758, 13.1902852 55.7065781, 13.1903071 55.7066218, 13.190342 55.7067242, 13.190363 55.7067227, 13.1903945 55.7067205, 13.1903987 55.7067157, 13.1904352 55.7067094, 13.1910138 55.7066293, 13.1909872 55.7065641, 13.1910247 55.7065596, 13.1910719 55.7065528, 13.1910341 55.7064716)), ((13.1913015 55.7064068, 13.1912723 55.706411, 13.1912616 55.7064183, 13.191259 55.7064293, 13.191248 55.7064396, 13.1911833 55.7064522, 13.1911141 55.7064603, 13.1911564 55.7065469, 13.1911868 55.7065431, 13.1912061 55.7065406, 13.1912298 55.7066002, 13.1912449 55.7065981, 13.1916827 55.7065379, 13.1916619 55.7064795, 13.1916589 55.7064711, 13.1916541 55.7064574, 13.1916482 55.7064411, 13.1913299 55.7064803, 13.1913015 55.7064068)))")
     t, bin3 = x.compress(geom1)
-    print("___")
-    print(bin3)
-    print(x.calculate_delta_sizes(geom1))
+    decomp = x.decompress(bin3)
+
+    #print(x.calculate_delta_size(geom1))
     #t, bin = x.decompress(bin)
 
 
