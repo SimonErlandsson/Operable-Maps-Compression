@@ -49,7 +49,7 @@ class Fpd(CompressionAlgorithm):
 
         elif geometry.geom_type == "MultiPolygon":
             for polygon in list(geometry.geoms):
-                subpoly_coord_count.extend(polygon.exterior.coords[:-1])
+                subpoly_coord_count.append(len(list(polygon.exterior.coords)))
                 for i in range(len(polygon.interiors)):
                     subpoly_coord_count.append(len(polygon.interiors[i].coords))
         return subpoly_coord_count
@@ -59,7 +59,6 @@ class Fpd(CompressionAlgorithm):
         poly_coord_count = deque([])
         if geometry.geom_type == "MultiPolygon":
             poly_coord_count = deque([len(shapely.get_coordinates(polygon)) for polygon in list(geometry.geoms)])
-            print(poly_coord_count)
         #Flattens array
         return poly_coord_count
     
@@ -138,11 +137,8 @@ class Fpd(CompressionAlgorithm):
         poly_point_cnt = 0
         subpoly_point_cnt = 0
 
-        if is_multipolygon:
-            return b"", 100
         #Loop all coordinates
         for i in range(len(coords)):
-
             if is_multipolygon and poly_point_cnt == 0:
                chk_point_nbr, poly_point_cnt = self.polygon_reset(res, chk_xs, chk_ys, chk_size_idx, poly_coord_count, chk_point_nbr)
 
@@ -175,13 +171,14 @@ class Fpd(CompressionAlgorithm):
                     self.save_clear_state(res, chk_xs, chk_ys)
 
             subpoly_point_cnt -= 1
+            poly_point_cnt -= 1
+
 
         if chk_point_nbr > 0:
             self.save_clear_state(res, chk_xs, chk_ys)
             res[chk_size_idx] = self.int_to_bytes(chk_point_nbr)
 
         res = b''.join(res)
-        print(len(res))
         return res, len(res)
 
     def fp_delta_decoding(self, bin):
@@ -201,8 +198,9 @@ class Fpd(CompressionAlgorithm):
          bit_cnts = {}
          for coord in coords:
              for i in range(2):
-                 bit_cnt = math.ceil(
-                     math.log2(self.get_zz_encoded_delta(prev[i], coord[i])))
+                 delta = self.get_zz_encoded_delta(prev[i], coord[i])
+                 bit_cnt = 1 if delta == 0 else math.ceil(
+                     math.log2(delta))
                  if bit_cnt not in bit_cnts:
                      bit_cnts[bit_cnt] = 1
                  else:
@@ -218,12 +216,10 @@ class Fpd(CompressionAlgorithm):
              lower_cnt -= bit_cnts[n]
              upper_cnt += bit_cnts[n]
 
-         print(tot_size)
          #    res_sizes.append(variable_size)
          # for i in range(len(delta_sizes)):
          #    print("delta size of", delta_sizes[i], "bytes -> total size of geometry:", res_sizes[i], "bytes")
          self.OPTIMAL_DELTA_SIZE = min(tot_size, key=tot_size.get)
-         print(self.OPTIMAL_DELTA_SIZE)
          return self.OPTIMAL_DELTA_SIZE
 
     def compress(self, geometry):
@@ -299,9 +295,7 @@ class Fpd(CompressionAlgorithm):
 
 def main():
     x = Fpd()
-    geom1 = shapely.wkt.loads(
-        "POLYGON ((13.1635138 55.7053599, 13.1637569 55.7053536, 13.1635571 55.705336, 13.1635158 55.7053284, 13.1635184 55.7053437, 13.1635138 55.7053599), (13.1667021 55.7046362, 13.1667117 55.7046498, 13.1667021 55.7046362))")
-
+    geom1 = shapely.wkt.loads("MULTIPOLYGON (((13.1910341 55.7064716, 13.1909909 55.7064777, 13.1903007 55.7065758, 13.1902852 55.7065781, 13.1903071 55.7066218, 13.190342 55.7067242, 13.190363 55.7067227, 13.1903945 55.7067205, 13.1903987 55.7067157, 13.1904352 55.7067094, 13.1910138 55.7066293, 13.1909872 55.7065641, 13.1910247 55.7065596, 13.1910719 55.7065528, 13.1910341 55.7064716)), ((13.1913015 55.7064068, 13.1912723 55.706411, 13.1912616 55.7064183, 13.191259 55.7064293, 13.191248 55.7064396, 13.1911833 55.7064522, 13.1911141 55.7064603, 13.1911564 55.7065469, 13.1911868 55.7065431, 13.1912061 55.7065406, 13.1912298 55.7066002, 13.1912449 55.7065981, 13.1916827 55.7065379, 13.1916619 55.7064795, 13.1916589 55.7064711, 13.1916541 55.7064574, 13.1916482 55.7064411, 13.1913299 55.7064803, 13.1913015 55.7064068)))")
     t, bin3 = x.compress(geom1)
     print("___")
     print(bin3)
