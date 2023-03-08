@@ -7,6 +7,7 @@ import time
 import struct
 import sys
 import math
+from shapely import GeometryType as GT
 
 
 class Fpd(CompressionAlgorithm):
@@ -63,26 +64,23 @@ class Fpd(CompressionAlgorithm):
     def init_chunk(self, res, chk_size, coords, pnt_idx, chk_ys, chk_xs):
         chk_size_idx = len(res)
         res.append(self.int_to_bytes(chk_size))
-        print("ADD CHK SIZE", chk_size)
 
 
         # Add full coordinates
-        chk_xs.append(self.float_to_bytes(coords[pnt_idx][0]))
-        chk_ys.append(self.float_to_bytes(coords[pnt_idx][1]))
-        print("FULL", coords[pnt_idx][0], coords[pnt_idx][1])
+        res.append(self.float_to_bytes(coords[pnt_idx][0]))
+        res.append(self.float_to_bytes(coords[pnt_idx][1]))
         return chk_size_idx
 
     def save_clear_state(self, res, chk_xs, chk_ys):
-        res += chk_xs + chk_ys
+        #res += chk_xs + chk_ys
         # Reset current chk state
         chk_xs.clear()
         chk_ys.clear()
 
-    def append_delta_pair(self, chk_xs, chk_ys, deltax, deltay, delta_size):
+    def append_delta_pair(self, res, deltax, deltay, delta_size):
         delta_bytes_x = deltax.to_bytes(delta_size, 'big')
         delta_bytes_y = deltay.to_bytes(delta_size, 'big')
-        chk_xs.append(delta_bytes_x)
-        chk_ys.append(delta_bytes_y)
+        res.extend([delta_bytes_x, delta_bytes_y])
 
 
     def init_bytearray(self, geometry, delta_size):
@@ -96,10 +94,8 @@ class Fpd(CompressionAlgorithm):
 
         # Meta data
         res.append(self.int_to_bytes(delta_size))
-        print("DELTA SIZE", delta_size)
 
-        res.append(self.type_int_convertion[geometry.geom_type].to_bytes(1, 'big')) #1 byte is enought for storing type
-        print("TYPE", self.type_int_convertion[geometry.geom_type])
+        res.append(int(shapely.get_type_id(geometry)).to_bytes(1, 'big')) #1 byte is enought for storing type
 
         return res
     
@@ -112,9 +108,9 @@ class Fpd(CompressionAlgorithm):
         #Reset and store previous chk data if interrupted in the middle of a chk
         if(len(chk_xs) != 0):
             res[chk_size_idx] = self.int_to_bytes(chk_point_nbr)
-            print("CHANGE CHK SIZE", chk_point_nbr)
 
             chk_point_nbr = 0
+
             self.save_clear_state(res, chk_xs, chk_ys)
 
         subpoly_point_cnt = geom_coord_count.popleft()
@@ -152,15 +148,9 @@ class Fpd(CompressionAlgorithm):
         for i in range(len(coords)):
             if is_multipolygon and poly_point_cnt == 0:
                chk_point_nbr, poly_point_cnt = self.polygon_reset(res, chk_xs, chk_ys, chk_size_idx, poly_coord_count, chk_point_nbr)
-               print("NEW POLY", poly_point_cnt)
-
-
 
             if is_polygon and subpoly_point_cnt == 0:
                chk_point_nbr, subpoly_point_cnt = self.polygon_reset(res, chk_xs, chk_ys, chk_size_idx, subpoly_coord_count, chk_point_nbr)
-               print("NEW SUBPOLY", subpoly_point_cnt)
-
-
 
             #----CHUNK HEADER INFORMATION (CHUNK SIZE, FULL FIRST COORDINATES)
             if chk_point_nbr == 0:
@@ -171,9 +161,8 @@ class Fpd(CompressionAlgorithm):
             else: #Loop for delta
                 zig_delta_x = self.get_zz_encoded_delta(coords[i - 1][0],coords[i][0])
                 zig_delta_y = self.get_zz_encoded_delta(coords[i - 1][1],coords[i][1])
-                print("DELTAS:",zig_delta_x, zig_delta_y)
                 if self.deltas_fit_in_bytes(delta_size,zig_delta_x,zig_delta_y):
-                    self.append_delta_pair(chk_xs, chk_ys, zig_delta_x, zig_delta_y, delta_size)
+                    self.append_delta_pair(res, zig_delta_x, zig_delta_y, delta_size)
                     chk_point_nbr += 1
                     
                 else:
@@ -194,7 +183,9 @@ class Fpd(CompressionAlgorithm):
         if chk_point_nbr > 0:
             self.save_clear_state(res, chk_xs, chk_ys)
             res[chk_size_idx] = self.int_to_bytes(chk_point_nbr)
+
         res = b''.join(res)
+        print(len(res))
         return res, len(res)
 
 
@@ -320,6 +311,7 @@ class Fpd(CompressionAlgorithm):
         _, geometry = self.decompress(bin)
         type = geometry.geom_type
         t = time.perf_counter()
+        return t - s, type
 
     def bounding_box(self, bin):
         s = time.perf_counter()
@@ -358,10 +350,10 @@ def main():
     x = Fpd()
     geom1 = shapely.wkt.loads("MULTIPOLYGON (((13.193709 55.7021381, 13.1937743 55.7021279, 13.1938355 55.7021184, 13.1938461 55.702109, 13.1938566 55.7020984, 13.1938611 55.7020902, 13.1938655 55.7020774, 13.1938655 55.7020633, 13.1938583 55.7020408, 13.1938402 55.7020014, 13.1937184 55.7017259, 13.1937008 55.7016876, 13.1936836 55.7016654, 13.1936537 55.7016428, 13.1936223 55.7016242, 13.1935741 55.7016036, 13.1935354 55.7015911, 13.1935006 55.701584, 13.1934829 55.701598, 13.1934673 55.7016115, 13.1934736 55.7016164, 13.1934776 55.7016216, 13.1934875 55.7016633, 13.1934985 55.7016898, 13.1935196 55.7017337, 13.1935659 55.7018353, 13.1936162 55.7018282, 13.1936551 55.7019155, 13.1936651 55.7019377, 13.1936955 55.7020047, 13.1936497 55.7020119, 13.193709 55.7021381)), ((13.1938175 55.7017126, 13.1938602 55.7017068, 13.1939048 55.7017007, 13.1938998 55.7016861, 13.193892 55.7016685, 13.1938831 55.7016589, 13.193871 55.701651, 13.1938602 55.701646, 13.1938405 55.7016438, 13.193822 55.7016456, 13.1938062 55.7016517, 13.1937985 55.7016571, 13.1937953 55.7016646, 13.1937979 55.7016746, 13.1938017 55.7016836, 13.1938052 55.7016908, 13.1938175 55.7017126)), ((13.1940245 55.7019788, 13.19398 55.7019848, 13.1939372 55.7019907, 13.1939585 55.7020383, 13.1939692 55.7020479, 13.1939841 55.7020512, 13.1939975 55.7020519, 13.1940079 55.702051, 13.1940198 55.7020497, 13.1940317 55.7020463, 13.1940395 55.7020422, 13.1940435 55.7020369, 13.1940452 55.7020314, 13.1940457 55.7020218, 13.1940245 55.7019788)), ((13.1939779 55.7015541, 13.1939529 55.701555, 13.1939622 55.7015658, 13.1939755 55.7015942, 13.194075 55.7018201, 13.1941382 55.7019637, 13.1941483 55.7019866, 13.194164 55.7020087, 13.1941899 55.7020304, 13.1942142 55.7020424, 13.1942291 55.7020486, 13.1942638 55.702042, 13.195019 55.7018988, 13.1948681 55.7018923, 13.1944181 55.7018687, 13.1944172 55.7018717, 13.194395 55.7018706, 13.1942164 55.7018622, 13.194172 55.7017564, 13.1941218 55.701761, 13.1941279 55.7017262, 13.1941357 55.7016818, 13.1940872 55.7015737, 13.1940769 55.7015503, 13.1939779 55.7015541), (13.1942341 55.7020059, 13.1942075 55.7020095, 13.1941895 55.7019673, 13.1941696 55.701921, 13.1941936 55.7019177, 13.1941884 55.7019055, 13.19426 55.7018958, 13.1942645 55.7019063, 13.1943172 55.7018991, 13.1943567 55.7019912, 13.1943041 55.7019984, 13.1943086 55.7020089, 13.1942394 55.7020183, 13.1942341 55.7020059)))")
     geom2 = shapely.wkt.loads("LINESTRING (13.199378 55.7034667, 13.1999441 55.7033986, 13.200125 55.7033882, 13.2002723 55.7033936, 13.2004383 55.7034097, 13.2005935 55.7034211, 13.2007699 55.703423, 13.2011275 55.7034136, 13.2012413 55.7034103, 13.2012947 55.7034088)")
-    #t, bin3 = x.compress(geom2)
-    #print(bin3)
+    t, bin3 = x.compress(geom1)
+    print(bin3)
     #decomp = x.decompress(bin3)
-    print(bytes(b'\xcf\x84\xcf\x81\xce\xbd\xcf\x82').binary())
+    #print(bytes(b'\xcf\x84\xcf\x81\xce\xbd\xcf\x82').binary())
     #print(x.calculate_delta_size(geom1))
     #t, bin = x.decompress(bin)
 
