@@ -36,15 +36,30 @@ class Fpd(CompressionAlgorithm):
         return self.zz_encode(self.int_repr(curr_coord) - self.int_repr(prev_coord))
     
     def deltas_fit_in_bytes(self, max_bytes, delta_x, delta_y):
-        return math.log2(delta_x) <= max_bytes * 8 and math.log2(delta_y) <= max_bytes * 8
+        return (delta_x == 0 or math.log2(delta_x) <= max_bytes * 8) and (delta_y == 0 or math.log2(delta_y) <= max_bytes * 8)
 
     def get_poly_ring_count(self, geometry):
         subpoly_coord_count = deque([])
-        if geometry.geom_type == "Polygon" or geometry.geom_type == "MultiPolygon":
+        if geometry.geom_type == "Polygon":
             subpoly_coord_count.append(len(geometry.exterior.coords))
             for i in range(len(geometry.interiors)):
                 subpoly_coord_count.append(len(geometry.interiors[i].coords))
+
+        elif geometry.geom_type == "MultiPolygon":
+            for polygon in list(geometry.geoms):
+                subpoly_coord_count.extend(polygon.exterior.coords[:-1])
+                for i in range(len(polygon.interiors)):
+                    subpoly_coord_count.append(len(polygon.interiors[i].coords))
         return subpoly_coord_count
+    
+
+    def get_multipoly_count(self, geometry):
+        poly_coord_count = deque([])
+        if geometry.geom_type == "MultiPolygon":
+            poly_coord_count = deque([len(shapely.get_coordinates(polygon)) for polygon in list(geometry.geoms)])
+            print(poly_coord_count)
+        #Flattens array
+        return poly_coord_count
     
     def init_chunk(self, res, chk_size, coords, pnt_idx, chk_ys, chk_xs):
         chk_size_idx = len(res)
@@ -69,27 +84,43 @@ class Fpd(CompressionAlgorithm):
         chk_ys.append(delta_bytes_y)
 
 
-    def init_bytearray(self, geometry, delta_size, chk_size):
+    def init_bytearray(self, geometry, delta_size):
         res = []
-        total_coords = len(shapely.get_coordinates(geometry))  
-        # Operation metadata
-        res.append(self.int_to_bytes(total_coords))
-        #Add bounding box
-        for bound in geometry.bounds:
-            res.append(self.float_to_bytes(bound))
+        #REMOVED FOR BASELINE
+        #total_coords = len(shapely.get_coordinates(geometry)) 
+        #
+        # # Operation metadata
+        # res.append(self.int_to_bytes(total_coords))
+        # #Add bounding box
+        # for bound in geometry.bounds:
+        #     res.append(self.float_to_bytes(bound))
 
         #Meta data
         res.append(self.int_to_bytes(delta_size))
-        res.append(self.int_to_bytes(chk_size))
         res.append(self.type_int_convertion[geometry.geom_type].to_bytes(1, 'big')) #1 byte is enought for storing type
         return res
 
 
-    def fp_delta_encoding(self, geometry, max_chk_size, delta_size):
+    def polygon_reset(self, res, chk_xs, chk_ys, chk_size_idx, geom_coord_count, chk_point_nbr):
+        #Reset and store previous chk data if interrupted in the middle of a chk
+        if(len(chk_xs) != 0):
+            res[chk_size_idx] = self.int_to_bytes(chk_point_nbr)
+            chk_point_nbr = 0
+            self.save_clear_state(res, chk_xs, chk_ys)
+
+        subpoly_point_cnt = geom_coord_count.popleft()
+        res.append(self.int_to_bytes(subpoly_point_cnt))
+        return chk_point_nbr, subpoly_point_cnt
+
+        
+    def fp_delta_encoding(self, geometry, delta_size, max_chk_size):
+
         coords = shapely.get_coordinates(geometry)
 
         #Saves interior and exterior lengths if polygon type
         subpoly_coord_count:deque = self.get_poly_ring_count(geometry)
+        poly_coord_count:deque = self.get_multipoly_count(geometry)
+
     
         #State of the current chk state
         chk_xs, chk_ys = [], []
@@ -99,30 +130,31 @@ class Fpd(CompressionAlgorithm):
         chk_point_nbr = 0
         
         #Array for storing list resulting bytes. Initialized with Total coordinates, bounding box, delta_size, chk_size, geom_type
-        res = self.init_bytearray(geometry,  delta_size, chk_size)
+        res = self.init_bytearray(geometry,  delta_size)
 
         #Polygon specific variables        
+        is_multipolygon = len(poly_coord_count) != 0
         is_polygon = len(subpoly_coord_count) != 0
+        
+        poly_point_cnt = 0
         subpoly_point_cnt = 0
 
+        if is_multipolygon:
+            return b"", 100
         #Loop all coordinates
         for i in range(len(coords)):
+
+            if is_multipolygon and poly_point_cnt == 0:
+               chk_point_nbr, poly_point_cnt = self.polygon_reset(res, chk_xs, chk_ys, chk_size_idx, poly_coord_count, chk_point_nbr)
+
+
             if is_polygon and subpoly_point_cnt == 0:
-                #Reset and store previous chk data if interrupted in the middle of a chk
-                if(len(chk_xs) != 0):
-                    res[chk_size_idx] = self.int_to_bytes(chk_point_nbr)
-                    chk_point_nbr = 0
-                    self.save_clear_state(res, chk_xs, chk_ys)
-
-
-                subpoly_point_cnt = subpoly_coord_count.popleft()
-                res.append(self.int_to_bytes(subpoly_point_cnt))
-
+               chk_point_nbr, subpoly_point_cnt = self.polygon_reset(res, chk_xs, chk_ys, chk_size_idx, subpoly_coord_count, chk_point_nbr)
 
             #----CHUNK HEADER INFORMATION (CHUNK SIZE, FULL FIRST COORDINATES)
             if chk_point_nbr == 0:
                 #save chk size and later change if reset occurs
-                chk_size_idx = self.init_chunk(res, chk_size, coords, i, chk_ys, chk_xs)
+                chk_size_idx = self.init_chunk(res, self.MAX_CHUNK_SIZE, coords, i, chk_ys, chk_xs)
                 chk_point_nbr += 1
 
             else: #Loop for delta
@@ -136,7 +168,7 @@ class Fpd(CompressionAlgorithm):
                 else:
                     res[chk_size_idx] = self.int_to_bytes(chk_point_nbr)
                     self.save_clear_state(res, chk_xs, chk_ys)
-                    chk_size_idx = self.init_chunk(res, chk_size, coords, i, chk_ys, chk_xs)
+                    chk_size_idx = self.init_chunk(res, self.MAX_CHUNK_SIZE, coords, i, chk_ys, chk_xs)
 
                     chk_point_nbr = 1
 
@@ -165,13 +197,15 @@ class Fpd(CompressionAlgorithm):
 
 
 
-    def calculate_delta_sizes(self, geometry):
-        _, variable_size = self.fp_delta_encoding(geometry, self.MAX_CHUNK_SIZE, delta_size=None)
-        
-        #    res_sizes.append(variable_size)
-        #for i in range(len(delta_sizes)):
-        #    print("delta size of", delta_sizes[i], "bytes -> total size of geometry:", res_sizes[i], "bytes")
-        #self.OPTIMAL_DELTA_SIZE = delta_sizes[res_sizes.index(min(res_sizes))]
+    def getOptimalDeltaSize(self, geometry):
+        delta_sizes  = [2]
+        res_sizes = []
+        for delta_size in delta_sizes:
+            _, variable_size = self.fp_delta_encoding(geometry, delta_size, self.MAX_CHUNK_SIZE)
+            res_sizes.append(variable_size)
+        for i in range(len(delta_sizes)):
+            print("delta size of", delta_sizes[i], "bytes -> total size of geometry:", res_sizes[i], "bytes")
+        self.OPTIMAL_DELTA_SIZE = delta_sizes[res_sizes.index(min(res_sizes))]
         return self.OPTIMAL_DELTA_SIZE
 
 
