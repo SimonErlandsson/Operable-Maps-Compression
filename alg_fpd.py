@@ -7,7 +7,6 @@ import time
 import struct
 import sys
 import math
-from shapely import GeometryType as GT
 
 
 class Fpd(CompressionAlgorithm):
@@ -29,7 +28,7 @@ class Fpd(CompressionAlgorithm):
         return struct.pack("f", x)
 
     def int_to_bytes(self, x):
-        return struct.pack('!I', x)
+        return struct.pack('>I', x)
 
     def zz_encode(self, num):
         return -2 * num - 1 if num < 0 else 2 * num
@@ -58,17 +57,19 @@ class Fpd(CompressionAlgorithm):
     def get_multipoly_count(self, geometry):
         poly_coord_count = deque([])
         if geometry.geom_type == "MultiPolygon":
-            poly_coord_count = deque([len(shapely.get_coordinates(polygon)) for polygon in list(geometry.geoms)])
-        #Flattens array
+            poly_coord_count = deque([len(list(polygon.interiors)) + 1 for polygon in list(geometry.geoms)])
         return poly_coord_count
     
     def init_chunk(self, res, chk_size, coords, pnt_idx, chk_ys, chk_xs):
         chk_size_idx = len(res)
         res.append(self.int_to_bytes(chk_size))
+        print("ADD CHK SIZE", chk_size)
+
 
         # Add full coordinates
         chk_xs.append(self.float_to_bytes(coords[pnt_idx][0]))
         chk_ys.append(self.float_to_bytes(coords[pnt_idx][1]))
+        print("FULL", coords[pnt_idx][0], coords[pnt_idx][1])
         return chk_size_idx
 
     def save_clear_state(self, res, chk_xs, chk_ys):
@@ -86,8 +87,20 @@ class Fpd(CompressionAlgorithm):
 
     def init_bytearray(self, geometry, delta_size):
         res = []
+        # total_coords = len(shapely.get_coordinates(geometry))  
+        # # Operation metadata
+        # res.append(self.int_to_bytes(total_coords))
+        # #Add bounding box
+        # for bound in geometry.bounds:
+        #     res.append(self.float_to_bytes(bound))
+
+        # Meta data
         res.append(self.int_to_bytes(delta_size))
-        res.append(int(shapely.get_type_id(geometry)).to_bytes(1, 'big')) #1 byte is enought for storing type
+        print("DELTA SIZE", delta_size)
+
+        res.append(self.type_int_convertion[geometry.geom_type].to_bytes(1, 'big')) #1 byte is enought for storing type
+        print("TYPE", self.type_int_convertion[geometry.geom_type])
+
         return res
     
     def decode_header(self, bin):
@@ -99,6 +112,8 @@ class Fpd(CompressionAlgorithm):
         #Reset and store previous chk data if interrupted in the middle of a chk
         if(len(chk_xs) != 0):
             res[chk_size_idx] = self.int_to_bytes(chk_point_nbr)
+            print("CHANGE CHK SIZE", chk_point_nbr)
+
             chk_point_nbr = 0
             self.save_clear_state(res, chk_xs, chk_ys)
 
@@ -137,19 +152,26 @@ class Fpd(CompressionAlgorithm):
         for i in range(len(coords)):
             if is_multipolygon and poly_point_cnt == 0:
                chk_point_nbr, poly_point_cnt = self.polygon_reset(res, chk_xs, chk_ys, chk_size_idx, poly_coord_count, chk_point_nbr)
+               print("NEW POLY", poly_point_cnt)
+
 
 
             if is_polygon and subpoly_point_cnt == 0:
                chk_point_nbr, subpoly_point_cnt = self.polygon_reset(res, chk_xs, chk_ys, chk_size_idx, subpoly_coord_count, chk_point_nbr)
+               print("NEW SUBPOLY", subpoly_point_cnt)
+
+
 
             #----CHUNK HEADER INFORMATION (CHUNK SIZE, FULL FIRST COORDINATES)
             if chk_point_nbr == 0:
                 #save chk size and later change if reset occurs
                 chk_size_idx = self.init_chunk(res, self.MAX_CHUNK_SIZE, coords, i, chk_ys, chk_xs)
+                chk_point_nbr += 1
 
             else: #Loop for delta
                 zig_delta_x = self.get_zz_encoded_delta(coords[i - 1][0],coords[i][0])
                 zig_delta_y = self.get_zz_encoded_delta(coords[i - 1][1],coords[i][1])
+                print("DELTAS:",zig_delta_x, zig_delta_y)
                 if self.deltas_fit_in_bytes(delta_size,zig_delta_x,zig_delta_y):
                     self.append_delta_pair(chk_xs, chk_ys, zig_delta_x, zig_delta_y, delta_size)
                     chk_point_nbr += 1
@@ -166,8 +188,8 @@ class Fpd(CompressionAlgorithm):
                     self.save_clear_state(res, chk_xs, chk_ys)
 
             subpoly_point_cnt -= 1
-            poly_point_cnt -= 1
-
+            if subpoly_point_cnt == 0:
+                poly_point_cnt -= 1
 
         if chk_point_nbr > 0:
             self.save_clear_state(res, chk_xs, chk_ys)
@@ -227,40 +249,11 @@ class Fpd(CompressionAlgorithm):
         reset_next = True
         chk_deltas = 0
 
-
-        # Parse to shapely object
-        # first retrieve the coordinates from your geojson dictionary
-        #rawcoords = candidate["coordinates"]
-
-        # # define the conversion functionß
-        # def PrepCoordsForShapely(rawcoords):
-        #     preppedcoords = []
-        #     #according to the geojson specs, a multipolygon is a list of linear rings, so we loop each
-        #     for eachpolygon in rawcoords:
-        #         #the first linear ring is the coordinates of the polygon, and shapely needs it to be a tuple
-        #         tupleofcoords = tuple(eachpolygon[0])
-        #         #the remaining linear rings, if any, are the coordinates of inner holes, and shapely needs these to be nested in a list
-        #         if len(eachpolygon) > 1:
-        #             listofholes = list(eachpolygon[1:])
-        #         else:
-        #             listofholes = []
-        #         #shapely defines each polygon in a multipolygon with the polygoon coordinates and the list of holes nested inside a tuple
-        #         eachpreppedpolygon = (tupleofcoords, listofholes)
-        #         #so append each prepped polygon to the final multipolygon list
-        #         preppedcoords.append(eachpreppedpolygon)
-        #     #finally, the prepped coordinates need to be nested inside a list in order to be used as a star-argument for the MultiPolygon constructor.
-        #     return [preppedcoords]
-
-        # # use the function to prepare coordinates for MultiPolygon
-        # preppedcoords = PrepCoordsForShapely(rawcoords)
-        # # use the prepped coordinates as a star-argument for the MultiPolygon constructor
-        # shapelymultipolygon = shapely.MultiPolygon(*preppedcoords)
-
-        return geometry
+        return bin, None
 
 
 
-    def calculate_delta_size(self, geometry):
+    def calculate_delta_sizes(self, geometry):
          coords = shapely.get_coordinates(geometry)
          prev = [0, 0]
          bit_cnts = {}
@@ -284,6 +277,9 @@ class Fpd(CompressionAlgorithm):
              lower_cnt -= bit_cnts[n]
              upper_cnt += bit_cnts[n]
 
+         #    res_sizes.append(variable_size)
+         # for i in range(len(delta_sizes)):
+         #    print("delta size of", delta_sizes[i], "bytes -> total size of geometry:", res_sizes[i], "bytes")
          self.OPTIMAL_DELTA_SIZE = min(tot_size, key=tot_size.get)
          return self.OPTIMAL_DELTA_SIZE
 
@@ -291,7 +287,7 @@ class Fpd(CompressionAlgorithm):
 
         # Create pre computed values to store as metadata
         s = time.perf_counter()
-        optimal_size = self.calculate_delta_size(geometry)
+        optimal_size = self.calculate_delta_sizes(geometry)
         if optimal_size % 8 != 0:
             optimal_size += 8
         optimal_size /= 8
@@ -302,10 +298,12 @@ class Fpd(CompressionAlgorithm):
         return t - s, res
 
     def decompress(self, bin):
+        res = None
         s = time.perf_counter()
-        geometry = self.fp_delta_decoding(bin)
+        res, _ = self.fp_delta_decoding(
+            bin, self.OPTIMAL_DELTA_SIZE, self.MAX_CHUNK_SIZE)
         t = time.perf_counter()
-        return t - s, geometry
+        return t - s, res
 
 
 # ---- UNARY ---- #
