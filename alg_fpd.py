@@ -303,10 +303,18 @@ class Fpd(CompressionAlgorithm):
         return t - s, bounds
 
     def add_vertex(self, args):
-        res = None
         bin, idx, pos = args
         s = time.perf_counter()
 
+        _, geometry = self.decompress(bin)
+        ragged = shapely.to_ragged_array([geometry])
+        points = np.concatenate((ragged[1][:idx, :], np.array([pos]), ragged[1][idx:, :]), axis=0) #Appearentlyq
+
+        offsets = list(ragged[2])
+        offsets[0] = np.array(list(map(lambda x: x + 1 if x > idx else x, offsets[0])))
+
+        res = shapely.from_ragged_array(geometry_type=shapely.get_type_id(geometry), coords=points, offsets=offsets)[0]
+        t = time.perf_counter()
         return t - s, res
 
     def is_intersecting(self, args):
