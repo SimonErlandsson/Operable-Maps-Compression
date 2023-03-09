@@ -1,12 +1,11 @@
-
 from base import CompressionAlgorithm
 from collections import deque
 import shapely
 import shapely.wkt
 import time
 import struct
-import sys
 import math
+import numpy as np
 from shapely import GeometryType as GT
 
 ## char: 8 bits
@@ -14,7 +13,6 @@ from shapely import GeometryType as GT
 ## double: 64 bits
 ## int: 32 bits
 ## long: 64 bits
-
 
 class Fpd(CompressionAlgorithm):
     MAX_NUM_DELTAS = 10
