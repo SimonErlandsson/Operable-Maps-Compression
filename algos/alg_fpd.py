@@ -1,4 +1,4 @@
-from base import CompressionAlgorithm
+from algos.base import CompressionAlgorithm
 from collections import deque
 import shapely
 import shapely.wkt
@@ -7,6 +7,7 @@ import struct
 import math
 import numpy as np
 from shapely import GeometryType as GT
+import bisect
 
 ## char: 8 bits
 ## float: 32 bits
@@ -15,7 +16,7 @@ from shapely import GeometryType as GT
 ## long: 64 bits
 
 class Fpd(CompressionAlgorithm):
-    MAX_NUM_DELTAS = 5
+    MAX_NUM_DELTAS = 50000
     offset = 0 # Used when parsing
 
 # ---- HELPER METHODS
@@ -179,7 +180,6 @@ class Fpd(CompressionAlgorithm):
         val = struct.unpack_from('!I', bin, self.offset)[0]
         self.offset += 4
         return val
-    
 
     def sequence_decoder(self, bin, seq_list, delta_size):
         chk_size = self.bytes_to_uint(bin)
@@ -232,8 +232,6 @@ class Fpd(CompressionAlgorithm):
                 self.polygon_decoder(bin, coords, delta_size)
             geometry = shapely.MultiPolygon(coords)
         return geometry
-
-
 
     def calculate_delta_size(self, geometry):
         RESET_POINT_SIZE = 64 * 2 + 32
@@ -304,19 +302,23 @@ class Fpd(CompressionAlgorithm):
         return t - s, bounds
 
     def add_vertex(self, args):
-        bin, idx, pos = args
+        bin, insert_idx, pos = args
         s = time.perf_counter()
 
         _, geometry = self.decompress(bin)
         ragged = shapely.to_ragged_array([geometry])
-        points = np.concatenate((ragged[1][:idx, :], np.array([pos]), ragged[1][idx:, :]), axis=0) #Appearentlyq
-
-        offsets = list(ragged[2])
-        offsets[0] = np.array(list(map(lambda x: x + 1 if x > idx else x, offsets[0])))
-
-        res = shapely.from_ragged_array(geometry_type=shapely.get_type_id(geometry), coords=points, offsets=offsets)[0]
+        points = np.insert(ragged[1], insert_idx, pos, axis=0) 
+   
+        # Use binary search O(log n) to find the index of the first element greater than insert_idx
+        increase_idx = bisect.bisect_right(ragged[2][0], insert_idx)
+        for i in range(increase_idx, len(ragged[2][0])):
+            ragged[2][0][i] += 1
+ 
+        geometry = shapely.from_ragged_array(geometry_type=shapely.get_type_id(geometry), coords=points, offsets=ragged[2])[0]
+        _, bin = self.compress(geometry)
+        
         t = time.perf_counter()
-        return t - s, res
+        return t - s, bin
 
     def is_intersecting(self, args):
         l_bin, r_bin = args
@@ -346,14 +348,18 @@ def main():
     geom3 = shapely.wkt.loads('POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848603 55.7056619, 13.1846238 55.7056422, 13.1846085 55.7057159, 13.1846356 55.7057179, 13.1848537 55.7057363), (13.1846694 55.705714, 13.1846543 55.7057128, 13.1846563 55.705705, 13.1846714 55.7057062, 13.1846694 55.705714), (13.1847425 55.7057123, 13.1847405 55.7057201, 13.1847254 55.7057188, 13.1847274 55.705711, 13.1847425 55.7057123), (13.1848001 55.7057179, 13.1848152 55.7057192, 13.1848131 55.705727, 13.1847981 55.7057258, 13.1848001 55.7057179), (13.1848068 55.7056929, 13.1848088 55.7056851, 13.1848239 55.7056863, 13.1848218 55.7056941, 13.1848068 55.7056929), (13.1847507 55.7056878, 13.1847356 55.7056865, 13.1847377 55.7056787, 13.1847528 55.70568, 13.1847507 55.7056878), (13.1846811 55.7056732, 13.184679 55.705681, 13.184664 55.7056798, 13.184666 55.705672, 13.1846811 55.7056732))')
     geom4 = shapely.wkt.loads('POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.184812 55.705646, 13.1848537 55.7057363))')
     geom5 = shapely.wkt.loads('MULTIPOLYGON (((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848861 55.705646, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1847300 55.705712, 13.1847425 55.7057123)), ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848841 55.705626, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1848861 55.705646, 13.1847425 55.7057123)))')
-    geom_list = [geom1, geom2, geom3, geom4, geom5]
+    geom_list = [geom2]# geom3, geom4, geom5]
+    # for geom in geom_list:
+    #    t, bin3 = x.compress(geom)
+    #    t, bin3 = x.add_vertex((bin3, 8, [0.2, 0.2]))
+    #    t, decomp = x.decompress(bin3)
+    #    print(decomp == geom)
 
-    for geom in geom_list:
-        t, bin3 = x.compress(geom)
-        t, decomp = x.decompress(bin3)
-        print(decomp == geom)
-        
-
+    
+    faulty_add = shapely.wkt.loads('POLYGON ((13.2287798 55.7140753, 13.2288713 55.713951, 13.2287496 55.7139225, 13.2286938 55.7139984, 13.2287396 55.7140091, 13.228704 55.7140575, 13.2287798 55.7140753))')
+    t, bin3 = x.compress(faulty_add)
+    t, bin3 = x.add_vertex((bin3, 6, (13.2, 55.7)))
+    t, decomp = x.decompress(bin3)
 
     #print(x.bytes_to_float32(b'0xa70x300x530x41')) 
     #print(bin3.hex(sep=' '))
@@ -374,7 +380,7 @@ def main():
     #print(x.get_poly_ring_count(geom5))
 
     #print(len(bytes(shapely.to_wkt(geom2), 'utf-8')), shapely.to_wkt(geom2))
-    #print(len(bin3), shapely.to_wkt(decomp))
+    print(len(bin3), shapely.to_wkt(decomp))
 
     
 

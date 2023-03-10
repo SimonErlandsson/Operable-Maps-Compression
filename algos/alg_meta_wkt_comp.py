@@ -1,7 +1,7 @@
 import json
 import os
 import shutil
-from base import CompressionAlgorithm
+from algos.base import CompressionAlgorithm
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import shape
@@ -11,9 +11,10 @@ import linecache
 import gzip
 import time
 import numpy as np
+import bisect
 
 
-class MetaWkt(CompressionAlgorithm):
+class MetaWktComp(CompressionAlgorithm):
 
     def compress(self, geometry):
         #Convert the geometry category names to numbers for smaller space (COMMENTED OUT FOR NOW) <- REF 1
@@ -73,19 +74,17 @@ class MetaWkt(CompressionAlgorithm):
         bin, insert_idx, pos = args
         s = time.perf_counter()
         
-        data = bin.split(b'\n', 1)[1] # Split at newline byte
-        wkt = gzip.decompress(data).decode('utf-8')
-        point_idx = 0
-        prev = ''
-        for c_idx, char in enumerate(wkt):
-            if char == ',' and prev != ')':
-                if insert_idx == point_idx:
-                    insert_string = f', {pos[0]} {pos[1]}'
-                    wkt = wkt[:c_idx] + insert_string + wkt[c_idx:]
-                    break
-                point_idx += 1
-            prev = char
-        _, bin = self.compress(shapely.from_wkt(wkt))
+        _, geometry = self.decompress(bin)
+        ragged = shapely.to_ragged_array([geometry])
+        points = np.insert(ragged[1], insert_idx, pos, axis=0) 
+   
+        # Use binary search O(log n) to find the index of the first element greater than insert_idx
+        increase_idx = bisect.bisect_right(ragged[2][0], insert_idx)
+        for i in range(increase_idx, len(ragged[2][0])):
+            ragged[2][0][i] += 1
+ 
+        geometry = shapely.from_ragged_array(geometry_type=shapely.get_type_id(geometry), coords=points, offsets=ragged[2])[0]
+        _, bin = self.compress(geometry)
 
         t = time.perf_counter()
         return t - s, bin
