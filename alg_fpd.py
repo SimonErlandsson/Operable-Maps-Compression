@@ -15,7 +15,7 @@ from shapely import GeometryType as GT
 ## long: 64 bits
 
 class Fpd(CompressionAlgorithm):
-    MAX_NUM_DELTAS = 10
+    MAX_NUM_DELTAS = 100000
     offset = 0 # Used when parsing
 
 # ---- HELPER METHODS
@@ -92,8 +92,8 @@ class Fpd(CompressionAlgorithm):
         is_polygon = shapely.get_type_id(geometry) == GT.POLYGON
         
         # Fetches number of points in each ring, nestled for multipoly
-        poly_ring_cnt_buffer = self.point_count(geometry)
-        ring_cnt_buffer = poly_ring_cnt_buffer # Not nestled for poly, else overwritten below
+        poly_buffer = self.point_count(geometry)
+        ring_buffer = poly_buffer if is_polygon else [] # Not nestled for poly, else overwritten below
 
         prev_x, prev_y = 0, 0 # Absolute value of previous coord
         chk_deltas = 0 # Cnt of 'deltas in chunk'
@@ -104,35 +104,35 @@ class Fpd(CompressionAlgorithm):
         
         # Loop all coordinates
         for x, y in shapely.get_coordinates(geometry):
-            # Check if we ran out of rings -> fetch ring counts of NEXT POLYGON
-            if is_multipolygon and ring_cnt_buffer.count() == 0:
-               ring_cnt_buffer = poly_ring_cnt_buffer.popleft()
-
-            # Ran out of points -> fetch next ring count
-            if not is_linestring and rem_points_ring == 0:
-                rem_points_ring = ring_cnt_buffer.popleft()
-               
             d_x_zig = self.get_zz_encoded_delta(prev_x, x) # Calculated delta based on previous iteration
             d_y_zig = self.get_zz_encoded_delta(prev_y, y)
             prev_x, prev_y = (x, y)
             
             # ---- CREATE NEW CHUNK? If 'first chunk', 'delta doesn't fit', 'new ring', or 'reached max deltas'
-            if chk_deltas_idx == 0 or not self.deltas_fit_in_bits(d_x_zig, d_y_zig, d_size) or num_chks_ring == 0 or chk_deltas == self.MAX_NUM_DELTAS:
+            if chk_deltas_idx == 0 or not self.deltas_fit_in_bits(d_x_zig, d_y_zig, d_size) or rem_points_ring == 0 or chk_deltas == self.MAX_NUM_DELTAS:
                 # If not 'first chunk' -> save previous chunk's size
                 if chk_deltas_idx != 0:
                     bytes[chk_deltas_idx] = self.uint_to_bytes(chk_deltas)
 
-                ###### ---- INITIALIZE NEW CHUNK -----
+                ###### ---- INITIALIZE NEW CHUNK ----- ######
                 chk_deltas = 0
-                # Is the coord part of a ring?
+
+                ### __ RING/MULTI-POLYGON META-DATA __ ###
                 if not is_linestring:
-                    # Is new ring?
-                    if num_chks_ring == 0:
+                    # Ran out of points -> fetch number of points in next ring
+                    if rem_points_ring == 0:
+                        # Check if we ran out of rings -> fetch rings of NEXT POLYGON
+                        if is_multipolygon and len(ring_buffer) == 0:
+                            ring_buffer = poly_buffer.popleft()
+                            bytes.append(self.uint_to_bytes(len(ring_buffer))) # Append 'nbr of rings in poly'
+                        # Set 'remaining points' to cnt in new ring
+                        rem_points_ring = ring_buffer.popleft()
                         num_chks_ring_idx = len(bytes)
                         bytes.append(self.uint_to_bytes(0)) # Reserve space for number of chunks for current ring, 32 bits for now
                         num_chks_ring = 1
                     else:
                         num_chks_ring += 1
+                ### __ ------------ END ------------- __ ###
                     
                 # Preparing chunk size (number of deltas)
                 chk_deltas_idx = len(bytes)
@@ -155,8 +155,8 @@ class Fpd(CompressionAlgorithm):
         # All points processed. Update size of final chunk
         bytes[chk_deltas_idx] = self.uint_to_bytes(chk_deltas)
 
-        #print(res) 
-        #print([int.from_bytes(i, 'big') for i in res])
+        #print(bytes) 
+        #print([int.from_bytes(i, 'big') for i in bytes])
         bytes = b''.join(bytes)
         return bytes
 
@@ -233,34 +233,34 @@ class Fpd(CompressionAlgorithm):
 
 
     def calculate_delta_size(self, geometry):
-         RESET_POINT_SIZE = 64 + 32
-         coords = shapely.get_coordinates(geometry)
-         prev = [0, 0]
-         bit_cnts = {}
-         for coord in coords:
-             for i in range(2):
-                 delta = self.get_zz_encoded_delta(prev[i], coord[i])
-                 bit_cnt = 1 if delta == 0 else math.ceil(
-                     math.log2(delta))
-                 if bit_cnt not in bit_cnts:
-                     bit_cnts[bit_cnt] = 1
-                 else:
-                     bit_cnts[bit_cnt] += 1
-             prev = coord
-         bit_cnts = dict(sorted(bit_cnts.items(), reverse=True))
+        RESET_POINT_SIZE = 64 * 2 + 32
+        coords = shapely.get_coordinates(geometry)
+        prev = [0, 0]
+        bit_cnts = {}
+        for coord in coords:
+            bit_cnt = 0
+            for i in range(2):
+                d = self.get_zz_encoded_delta(prev[i], coord[i])
+                d_bit_cnt = 1 if d == 0 else math.ceil(math.log2(d))
+                bit_cnt = max(bit_cnt, d_bit_cnt)
+                
+            if bit_cnt not in bit_cnts:
+                bit_cnts[bit_cnt] = 1
+            else:
+                bit_cnts[bit_cnt] += 1
+            prev = coord
+        bit_cnts = dict(sorted(bit_cnts.items(), reverse=True))
 
-         tot_size = {}
-         upper_cnt = 0
-         lower_cnt = 2 * len(coords)
-         for n in bit_cnts.keys():
-             tot_size[n] = n * lower_cnt + RESET_POINT_SIZE * upper_cnt
-             lower_cnt -= bit_cnts[n]
-             upper_cnt += bit_cnts[n]
+        tot_size = {}
+        upper_cnt = 0
+        lower_cnt = len(coords)
+        for n in bit_cnts.keys():
+            tot_size[n] = n * lower_cnt * 2 + RESET_POINT_SIZE * upper_cnt
+            lower_cnt -= bit_cnts[n]
+            upper_cnt += bit_cnts[n]
 
-         #    res_sizes.append(variable_size)
-         # for i in range(len(delta_sizes)):
-         #    print("delta size of", delta_sizes[i], "bytes -> total size of geometry:", res_sizes[i], "bytes")
-         return min(tot_size, key=tot_size.get)
+        #print({i: tot_size[i] // 8 for i in tot_size.keys()})
+        return min(tot_size, key=tot_size.get)
 
     def compress(self, geometry):
         s = time.perf_counter()
@@ -341,17 +341,17 @@ def main():
     geom1 = shapely.wkt.loads("MULTIPOLYGON (((13.193709 55.7021381, 13.1937743 55.7021279, 13.1938355 55.7021184, 13.1938461 55.702109, 13.1938566 55.7020984, 13.1938611 55.7020902, 13.1938655 55.7020774, 13.1938655 55.7020633, 13.1938583 55.7020408, 13.1938402 55.7020014, 13.1937184 55.7017259, 13.1937008 55.7016876, 13.1936836 55.7016654, 13.1936537 55.7016428, 13.1936223 55.7016242, 13.1935741 55.7016036, 13.1935354 55.7015911, 13.1935006 55.701584, 13.1934829 55.701598, 13.1934673 55.7016115, 13.1934736 55.7016164, 13.1934776 55.7016216, 13.1934875 55.7016633, 13.1934985 55.7016898, 13.1935196 55.7017337, 13.1935659 55.7018353, 13.1936162 55.7018282, 13.1936551 55.7019155, 13.1936651 55.7019377, 13.1936955 55.7020047, 13.1936497 55.7020119, 13.193709 55.7021381)), ((13.1938175 55.7017126, 13.1938602 55.7017068, 13.1939048 55.7017007, 13.1938998 55.7016861, 13.193892 55.7016685, 13.1938831 55.7016589, 13.193871 55.701651, 13.1938602 55.701646, 13.1938405 55.7016438, 13.193822 55.7016456, 13.1938062 55.7016517, 13.1937985 55.7016571, 13.1937953 55.7016646, 13.1937979 55.7016746, 13.1938017 55.7016836, 13.1938052 55.7016908, 13.1938175 55.7017126)), ((13.1940245 55.7019788, 13.19398 55.7019848, 13.1939372 55.7019907, 13.1939585 55.7020383, 13.1939692 55.7020479, 13.1939841 55.7020512, 13.1939975 55.7020519, 13.1940079 55.702051, 13.1940198 55.7020497, 13.1940317 55.7020463, 13.1940395 55.7020422, 13.1940435 55.7020369, 13.1940452 55.7020314, 13.1940457 55.7020218, 13.1940245 55.7019788)), ((13.1939779 55.7015541, 13.1939529 55.701555, 13.1939622 55.7015658, 13.1939755 55.7015942, 13.194075 55.7018201, 13.1941382 55.7019637, 13.1941483 55.7019866, 13.194164 55.7020087, 13.1941899 55.7020304, 13.1942142 55.7020424, 13.1942291 55.7020486, 13.1942638 55.702042, 13.195019 55.7018988, 13.1948681 55.7018923, 13.1944181 55.7018687, 13.1944172 55.7018717, 13.194395 55.7018706, 13.1942164 55.7018622, 13.194172 55.7017564, 13.1941218 55.701761, 13.1941279 55.7017262, 13.1941357 55.7016818, 13.1940872 55.7015737, 13.1940769 55.7015503, 13.1939779 55.7015541), (13.1942341 55.7020059, 13.1942075 55.7020095, 13.1941895 55.7019673, 13.1941696 55.701921, 13.1941936 55.7019177, 13.1941884 55.7019055, 13.19426 55.7018958, 13.1942645 55.7019063, 13.1943172 55.7018991, 13.1943567 55.7019912, 13.1943041 55.7019984, 13.1943086 55.7020089, 13.1942394 55.7020183, 13.1942341 55.7020059)))")
     geom2 = shapely.wkt.loads("LINESTRING (13.199378 55.7034667, 13.1999441 55.7033986, 13.200125 55.7033882, 13.2002723 55.7033936, 13.2004383 55.7034097, 13.2005935 55.7034211, 13.2007699 55.703423, 13.2011275 55.7034136, 13.2012413 55.7034103, 13.2012947 55.7034088)")
     geom3 = shapely.wkt.loads('POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848603 55.7056619, 13.1846238 55.7056422, 13.1846085 55.7057159, 13.1846356 55.7057179, 13.1848537 55.7057363), (13.1846694 55.705714, 13.1846543 55.7057128, 13.1846563 55.705705, 13.1846714 55.7057062, 13.1846694 55.705714), (13.1847425 55.7057123, 13.1847405 55.7057201, 13.1847254 55.7057188, 13.1847274 55.705711, 13.1847425 55.7057123), (13.1848001 55.7057179, 13.1848152 55.7057192, 13.1848131 55.705727, 13.1847981 55.7057258, 13.1848001 55.7057179), (13.1848068 55.7056929, 13.1848088 55.7056851, 13.1848239 55.7056863, 13.1848218 55.7056941, 13.1848068 55.7056929), (13.1847507 55.7056878, 13.1847356 55.7056865, 13.1847377 55.7056787, 13.1847528 55.70568, 13.1847507 55.7056878), (13.1846811 55.7056732, 13.184679 55.705681, 13.184664 55.7056798, 13.184666 55.705672, 13.1846811 55.7056732))')
-    geom4 = shapely.wkt.loads('POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847405 55.7057201, 13.1847254 55.7057188, 13.1847274 55.705711, 13.1847425 55.7057123),  (13.1847425 55.7057123, 13.1847405 55.7057201, 13.1847254 55.7057188, 13.1847274 55.705711, 13.1847425 55.7057123))')
+    geom4 = shapely.wkt.loads('POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848537 55.7057363))')
     geom5 = shapely.wkt.loads('MULTIPOLYGON (((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848861 55.705646, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1847425 55.7057123)), ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1848861 55.705646, 13.1847425 55.7057123)))')
     #print(x.point_count(geom3))
-    t, bin3 = x.compress(geom3)
+    t, bin3 = x.compress(geom2)
     #print(x.bytes_to_float32(b'0xa70x300x530x41')) 
     #print(bin3.hex(sep=' '))
     #print("-DELTASIZE-_TY_POINTSINCHK_XFIRST-----------------_YFIRST-----------------")
     #print("-DELTASIZE-_TY_RINGS------_POINTSINCHK_XFIRST-----------------_YFIRST-----------------_--XD1---------_--YD1---------_--XD2---------_--YD2---------_--XD3---------_--YD3---------_--XD4---------_--YD4---------_--XD5---------_--YD5---------_--XD6---------_--YD6---------_--XD7---------_--YD7---------_--XD8---------_--YD8---------_--XD9---------_--YD9---------")
     #t = shapely.to_ragged_array([geom1])
     #print(t[2])
-    #t, decomp = x.decompress(bin3)
+    t, decomp = x.decompress(bin3)
     #print(x.bytes_to_float(bin3, size=16))
     #print(x.calculate_delta_size(geom1))
     #t, bin = x.decompress(bin)
@@ -362,8 +362,8 @@ def main():
     #print(int(t, 2))
     #print(x.get_poly_ring_count(geom5))
 
-    #print(len(bytes(shapely.to_wkt(geom2), 'utf-8')), shapely.to_wkt(geom2))
-    #print(len(bin3), shapely.to_wkt(decomp))
+    print(len(bytes(shapely.to_wkt(geom2), 'utf-8')), shapely.to_wkt(geom2))
+    print(len(bin3), shapely.to_wkt(decomp))
 
     
 
