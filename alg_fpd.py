@@ -179,73 +179,57 @@ class Fpd(CompressionAlgorithm):
         val = struct.unpack_from('!I', bin, self.offset)[0]
         self.offset += 4
         return val
+    
+
+    def sequence_decoder(self, bin, seq_list, delta_size):
+        chk_size = self.bytes_to_uint(bin)
+        # Extract reset point
+        x = self.bytes_to_double(bin)
+        y = self.bytes_to_double(bin)
+        seq_list.append((x, y))
+        # Loop through deltas in chunk
+        for _ in range(chk_size):
+            x = self.bytes_to_decoded_coord(bin, x, delta_size)
+            y = self.bytes_to_decoded_coord(bin, y, delta_size)
+            seq_list.append((x, y))
+        
+    def ring_decoder(self, bin, polygon_list, delta_size):
+        # Extract number of chunks for a ring
+        chks_in_ring = self.bytes_to_uint(bin) 
+        ring_coords = []
+        # Loop through chunks in ring
+        for i in range(chks_in_ring): 
+            self.sequence_decoder(bin, ring_coords, delta_size)
+        polygon_list.append(ring_coords) 
+        
+
+    def polygon_decoder(self, bin, multipolygon_coords, delta_size):
+        # Extract number of rings for a polygon
+        rings_in_poly = self.bytes_to_uint(bin) 
+        polygon_coords = []
+        # Loop through rings in polygon
+        for _ in range(rings_in_poly):
+            self.ring_decoder(bin,polygon_coords,delta_size)
+        multipolygon_coords.append(shapely.Polygon(shell=polygon_coords[0], holes=polygon_coords[1:]))
 
     def fp_delta_decoding(self, bin):
         self.offset = 0
         delta_size, type = self.decode_header(bin)
-
+        binary_length = len(bin)
+        coords = []
         if type == GT.LINESTRING:
-            coords = [] 
-            while (self.offset < len(bin)): # While != EOF  
-                chk_size = self.bytes_to_uint(bin)
-                # Extract reset point
-                x = self.bytes_to_double(bin)
-                y = self.bytes_to_double(bin)
-                coords.append((x, y))
-                # Loop through deltas in chunk
-                for i in range(chk_size):
-                    x = self.bytes_to_decoded_coord(bin, x, delta_size)
-                    y = self.bytes_to_decoded_coord(bin, y, delta_size)
-                    coords.append((x, y))
-            # All coords added
+            while (self.offset < binary_length): # While != EOF  
+                self.sequence_decoder(bin, coords, delta_size)
             geometry = shapely.LineString(coords)
 
         elif type == GT.POLYGON:
-            coords = []
-            while (self.offset < len(bin)): # While != EOF
-                chks_in_ring = self.bytes_to_uint(bin) 
-                ring_coords = []
-                for i in range(chks_in_ring):   
-                    chk_size = self.bytes_to_uint(bin)
-
-                    # Extract reset point
-                    x = self.bytes_to_double(bin)
-                    y = self.bytes_to_double(bin)
-                    ring_coords.append((x, y))
-                    # Loop through deltas in chunk
-                    for i in range(chk_size):
-                        x = self.bytes_to_decoded_coord(bin, x, delta_size)
-                        y = self.bytes_to_decoded_coord(bin, y, delta_size)
-                        ring_coords.append((x, y))
-                coords.append(ring_coords)    
-            # All coords added
+            while (self.offset < binary_length): # While != EOF
+                self.ring_decoder(bin, coords, delta_size)
             geometry = shapely.Polygon(shell=coords[0], holes=coords[1:])
-
             
         elif type == GT.MULTIPOLYGON:
-            coords = []
-            while (self.offset < len(bin)): # While != EOF
-                rings_in_poly = self.bytes_to_uint(bin) 
-                poly_coords = []
-                for j in range(rings_in_poly):
-                    chks_in_ring = self.bytes_to_uint(bin) 
-                    ring_coords = []
-                    for i in range(chks_in_ring):   
-                        chk_size = self.bytes_to_uint(bin)
-                        # Extract reset point
-                        x = self.bytes_to_double(bin)
-                        y = self.bytes_to_double(bin)
-                        ring_coords.append((x, y))
-                        # Loop through deltas in chunk
-                        for i in range(chk_size):
-                            #print(i)
-                            x = self.bytes_to_decoded_coord(bin, x, delta_size)
-                            y = self.bytes_to_decoded_coord(bin, y, delta_size)
-                            ring_coords.append((x, y))
-                    poly_coords.append(ring_coords)
-                coords.append(shapely.Polygon(shell=poly_coords[0], holes=poly_coords[1:]))
-            
-            # All coords added
+            while (self.offset < binary_length): # While != EOF
+                self.polygon_decoder(bin, coords, delta_size)
             geometry = shapely.MultiPolygon(coords)
         return geometry
 
@@ -368,6 +352,7 @@ def main():
         t, bin3 = x.compress(geom)
         t, decomp = x.decompress(bin3)
         print(decomp == geom)
+        
 
 
     #print(x.bytes_to_float32(b'0xa70x300x530x41')) 
