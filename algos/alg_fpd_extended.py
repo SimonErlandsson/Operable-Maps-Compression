@@ -314,7 +314,12 @@ class FpdExtended(CompressionAlgorithm):
     def type(self, bin):
         s = time.perf_counter()
         type = struct.unpack_from('!B', bin, offset=1)[0] # 1 Byte offset
-        type = GT(type)
+        if type == GT.LINESTRING:
+            type = 'LineString'
+        elif type == GT.POLYGON:
+            type = 'Polygon'
+        elif type == GT.MULTIPOLYGON:
+            type = 'MultiPolygon'
         t = time.perf_counter()
         return t - s, type
 
@@ -326,20 +331,32 @@ class FpdExtended(CompressionAlgorithm):
         return t - s, bounds
 
     def add_vertex(self, args):
-        bin, insert_idx, pos = args
+        bin_in, insert_idx, pos = args
         s = time.perf_counter()
 
-        _, geometry = self.decompress(bin)
-        ragged = shapely.to_ragged_array([geometry])
-        points = np.insert(ragged[1], insert_idx, pos, axis=0) 
-   
-        # Use binary search O(log n) to find the index of the first element greater than insert_idx
-        increase_idx = bisect.bisect_right(ragged[2][0], insert_idx)
-        for i in range(increase_idx, len(ragged[2][0])):
-            ragged[2][0][i] += 1
- 
-        geometry = shapely.from_ragged_array(geometry_type=shapely.get_type_id(geometry), coords=points, offsets=ragged[2])[0]
-        _, bin = self.compress(geometry)
+        self.offset = 0
+        bin = bitarray(endian='big')
+        bin.frombytes(bin_in)
+
+        delta_size, type = self.decode_header(bin)
+        # Type specific variables
+        is_linestring = type == GT.LINESTRING  
+        is_multipolygon = type == GT.MULTIPOLYGON
+        is_polygon = type == GT.POLYGON
+
+        p_idx = 0
+        chunks_in_ring_left = 0
+        rings_left = 0
+        while (p_idx < insert_idx):
+            if is_multipolygon and rings_left == 0:
+                rings_left = self.bytes_to_uint(bin, POLY_RING_CNT_SIZE)
+            if not is_linestring and chunks_in_ring_left == 0:
+                chunks_in_ring_left = self.bytes_to_uint(bin, RING_CHK_CNT_SIZE)
+            
+
+        binary_length = len(bin)
+        coords = []
+        if type == GT.LINESTRING:        
         
         t = time.perf_counter()
         return t - s, bin
