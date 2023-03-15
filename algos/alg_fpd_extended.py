@@ -225,7 +225,7 @@ class FpdExtended(CompressionAlgorithm):
         # Loop through chunks in ring
         for i in range(chks_in_ring): 
             self.sequence_decoder(bin, ring_coords, delta_size)
-        polygon_list.append(ring_coords) 
+        polygon_list.append(ring_coords)
         
     def polygon_decoder(self, bin, multipolygon_coords, delta_size):
         # Extract number of rings for a polygon
@@ -348,8 +348,9 @@ class FpdExtended(CompressionAlgorithm):
         is_polygon = type == GT.POLYGON
 
         p_idx = 0
-        chunks_in_ring_left = 0
-        chunks_in_ring_left_idx = 0
+        chunks_in_ring_left = 0 # Used for iteration
+        chunks_in_ring = 0 # Cache for store later
+        chunks_in_ring_idx = 0
         rings_left = 0
         while (p_idx <= insert_idx):
             if is_multipolygon and rings_left == 0:
@@ -365,15 +366,39 @@ class FpdExtended(CompressionAlgorithm):
                 # Is first (reset)?
                 if p_idx == insert_idx:
                     # Does the delta to the old reset point fit? -> The added point becomes the reset
-                    if 
+                    reset_point = (self.bytes_to_double(bin), self.bytes_to_double(bin))
+                    d_x = self.get_zz_encoded_delta(pos[0], reset_point[0])
+                    d_y = self.get_zz_encoded_delta(pos[1], reset_point[1])
+                    if self.deltas_fit_in_bits(d_x, d_y, delta_size):
+                        left = bin[0:deltas_in_chunk_offset]
+                        middle = bitarray(endian='big')
+                        
+                        middle.extend(self.uint_to_ba(deltas_in_chunk + 1, D_CNT_SIZE))
+                        # Add full coordinates
+                        middle.frombytes(self.double_to_bytes(pos[0]))
+                        middle.frombytes(self.double_to_bytes(pos[1]))
+                        self.append_delta_pair(middle, d_x, d_y, delta_size)
 
+                        right = bin[deltas_in_chunk_offset + D_CNT_SIZE + 64 * 2:]
+                        bin = left
+                        bin.extend(middle)
+                        bin.extend(right)
                     # Does not fit, create new chunk using the old chunk's counter
                     else:
-                        chunks_in_ring_offset += 1 # inte offsetet 
-
+                        left = bin[0:deltas_in_chunk_offset]
+                        middle = bitarray(endian='big')
+                        
+                        middle.extend(self.uint_to_ba(0, D_CNT_SIZE))
+                        # Add full coordinates
+                        middle.frombytes(self.double_to_bytes(pos[0]))
+                        middle.frombytes(self.double_to_bytes(pos[1]))
+                        right = bin[deltas_in_chunk_offset + D_CNT_SIZE:]
+                        bin = left
+                        bin.extend(middle)
+                        bin.extend(right)
+                        bin[chunks_in_ring_offset:chunks_in_ring_offset+RING_CHK_CNT_SIZE] = self.uint_to_ba(chunks_in_ring + 1, RING_CHK_CNT_SIZE)
                 else:
-                
-                print(p_idx)
+                    # 
                 break
             else:
                 # Jump to next chunk
@@ -381,12 +406,22 @@ class FpdExtended(CompressionAlgorithm):
                 self.offset += 64 * 2 + delta_size * 2 * deltas_in_chunk
                 chunks_in_ring_left -= 1
 
-            #0 1 2
-            #S D D
+            # A B C D
+              
+              # 1 Första, delta får plats: blir nya start av gamla chunken, bildar kedja efter
+              # 2 Första, delta får inte plats. Ny chunk prependas
+              # 3 Mitten: delta får plats, lägg til direkt, men ändra den efter
+              # 4 Mitten: delta får inte plats, dela gamla chunken i två nya
+              # 5 Sista: delta får plats, lägg till direkt
+              # 6 Sista: delta får inte plats, skapa ny chunk och appenda efter
 
-        binary_length = len(bin)
+              # 2, 6 Samma skiljer bara offset där chunk ska läggas till
+              # 3, 5 Samma förutom att 3 behöver ändra den efter
+              # 
+              # Bör fixa så inte start-koordinat finns i både början och slut
     
-        
+        bin = bin.tobytes()
+        print("HEJ", bin)
         t = time.perf_counter()
         return t - s, bin
 
@@ -429,12 +464,12 @@ def main():
     #    print(decomp == geom)
 
     
-    faulty_add = shapely.wkt.loads('POLYGON ((13.2287798 55.7140753, 13.2288713 55.713951, 13.2287496 55.7139225, 13.2286938 55.7139984, 13.2287396 55.7140091, 13.228704 55.7140575, 13.2287798 55.7140753))')
+    faulty_add = shapely.wkt.loads('POLYGON ((13.2 55.7140753, 13.2288713 55.713951, 13.2287496 55.7139225, 13.2286938 55.7139984, 13.2287396 55.7140091, 13.228704 55.7140575, 13.2287798 55.7140753))')
     t, bin3 = x.compress(faulty_add)
     binary = bitarray()
     binary.frombytes(bin3)
     util.pprint(binary)
-    t, bin3 = x.add_vertex((bin3, 7, (13.2, 55.7)))
+    t, bin3 = x.add_vertex((bin3, 0, (13.2287797, 55.7140753)))
     t, decomp = x.decompress(bin3)
     print(decomp == faulty_add)
     #print(x.bytes_to_float32(b'0xa70x300x530x41')) 
@@ -456,7 +491,9 @@ def main():
     #print(x.get_poly_ring_count(geom5))
 
     #print(len(bytes(shapely.to_wkt(geom4), 'utf-8')), shapely.to_wkt(geom4))
-    #print(len(bin3), shapely.to_wkt(decomp))
+    print(shapely.to_wkt(faulty_add, rounding_precision=-1))
+    print(shapely.to_wkt(decomp, rounding_precision=-1))
+    print("LEN COMP", len(bin3))
 
     
 
