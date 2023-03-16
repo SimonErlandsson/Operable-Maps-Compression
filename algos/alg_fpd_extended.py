@@ -27,12 +27,13 @@ from bitarray import bitarray, util
 ## int: 32 bits
 ## long: 64 bits
 
-D_CNT_SIZE = 6
-POLY_RING_CNT_SIZE = 9
-RING_CHK_CNT_SIZE = 11
+D_CNT_SIZE = 16
+POLY_RING_CNT_SIZE = 16
+RING_CHK_CNT_SIZE = 16
+
+MAX_NUM_DELTAS = 2 # Max number of deltas in a chunk before split
 
 class FpdExtended(CompressionAlgorithm):
-    MAX_NUM_DELTAS = 31
     offset = 0 # Used when parsing
 
 # ---- HELPER METHODS
@@ -104,7 +105,9 @@ class FpdExtended(CompressionAlgorithm):
         bits.extend(x_bytes)
         bits.extend(y_bytes)
 
-    def fp_delta_encoding(self, geometry, d_size):    
+    def fp_delta_encoding(self, geometry, d_size):
+        # TODO: REMOVE!!!
+        d_size = 50
         # List of resulting bytes.
         bits = bitarray(endian='big')
         # Init with 'd_size', 'geom_type'
@@ -133,7 +136,7 @@ class FpdExtended(CompressionAlgorithm):
             prev_x, prev_y = (x, y)
             
             # ---- CREATE NEW CHUNK? If 'first chunk', 'delta doesn't fit', 'new ring', or 'reached max deltas'
-            if chk_deltas_idx == 0 or not self.deltas_fit_in_bits(d_x_zig, d_y_zig, d_size) or rem_points_ring == 0 or chk_deltas == self.MAX_NUM_DELTAS:
+            if chk_deltas_idx == 0 or not self.deltas_fit_in_bits(d_x_zig, d_y_zig, d_size) or rem_points_ring == 0 or chk_deltas == MAX_NUM_DELTAS:
                 # If not 'first chunk' -> save previous chunk's size
                 if chk_deltas_idx != 0:
                     bits[chk_deltas_idx:chk_deltas_idx+D_CNT_SIZE] = self.uint_to_ba(chk_deltas, D_CNT_SIZE)
@@ -222,7 +225,7 @@ class FpdExtended(CompressionAlgorithm):
         # Loop through chunks in ring
         for i in range(chks_in_ring): 
             self.sequence_decoder(bin, ring_coords, delta_size)
-        polygon_list.append(ring_coords) 
+        polygon_list.append(ring_coords)
         
     def polygon_decoder(self, bin, multipolygon_coords, delta_size):
         # Extract number of rings for a polygon
@@ -314,7 +317,12 @@ class FpdExtended(CompressionAlgorithm):
     def type(self, bin):
         s = time.perf_counter()
         type = struct.unpack_from('!B', bin, offset=1)[0] # 1 Byte offset
-        type = GT(type)
+        if type == GT.LINESTRING:
+            type = 'LineString'
+        elif type == GT.POLYGON:
+            type = 'Polygon'
+        elif type == GT.MULTIPOLYGON:
+            type = 'MultiPolygon'
         t = time.perf_counter()
         return t - s, type
 
@@ -326,21 +334,94 @@ class FpdExtended(CompressionAlgorithm):
         return t - s, bounds
 
     def add_vertex(self, args):
-        bin, insert_idx, pos = args
+        bin_in, insert_idx, pos = args
         s = time.perf_counter()
 
-        _, geometry = self.decompress(bin)
-        ragged = shapely.to_ragged_array([geometry])
-        points = np.insert(ragged[1], insert_idx, pos, axis=0) 
-   
-        # Use binary search O(log n) to find the index of the first element greater than insert_idx
-        increase_idx = bisect.bisect_right(ragged[2][0], insert_idx)
-        for i in range(increase_idx, len(ragged[2][0])):
-            ragged[2][0][i] += 1
- 
-        geometry = shapely.from_ragged_array(geometry_type=shapely.get_type_id(geometry), coords=points, offsets=ragged[2])[0]
-        _, bin = self.compress(geometry)
-        
+        self.offset = 0
+        bin = bitarray(endian='big')
+        bin.frombytes(bin_in)
+
+        delta_size, type = self.decode_header(bin)
+        # Type specific variables
+        is_linestring = type == GT.LINESTRING  
+        is_multipolygon = type == GT.MULTIPOLYGON
+        is_polygon = type == GT.POLYGON
+
+        p_idx = 0
+        chunks_in_ring_left = 0 # Used for iteration
+        chunks_in_ring = 0 # Cache for store later
+        chunks_in_ring_idx = 0
+        rings_left = 0
+        while (p_idx <= insert_idx):
+            if is_multipolygon and rings_left == 0:
+                rings_left = self.bytes_to_uint(bin, POLY_RING_CNT_SIZE)
+            if not is_linestring and chunks_in_ring_left == 0:
+                chunks_in_ring_offset = self.offset
+                chunks_in_ring_left = self.bytes_to_uint(bin, RING_CHK_CNT_SIZE)
+            deltas_in_chunk_offset = self.offset
+            deltas_in_chunk = self.bytes_to_uint(bin, D_CNT_SIZE)
+            print(p_idx, deltas_in_chunk, insert_idx)
+            # Found chunk to append/prepend?
+            if p_idx <= insert_idx and insert_idx <= p_idx + deltas_in_chunk:
+                # Is first (reset)?
+                if p_idx == insert_idx:
+                    # Does the delta to the old reset point fit? -> The added point becomes the reset
+                    reset_point = (self.bytes_to_double(bin), self.bytes_to_double(bin))
+                    d_x = self.get_zz_encoded_delta(pos[0], reset_point[0])
+                    d_y = self.get_zz_encoded_delta(pos[1], reset_point[1])
+                    if self.deltas_fit_in_bits(d_x, d_y, delta_size):
+                        left = bin[0:deltas_in_chunk_offset]
+                        middle = bitarray(endian='big')
+                        
+                        middle.extend(self.uint_to_ba(deltas_in_chunk + 1, D_CNT_SIZE))
+                        # Add full coordinates
+                        middle.frombytes(self.double_to_bytes(pos[0]))
+                        middle.frombytes(self.double_to_bytes(pos[1]))
+                        self.append_delta_pair(middle, d_x, d_y, delta_size)
+
+                        right = bin[deltas_in_chunk_offset + D_CNT_SIZE + 64 * 2:]
+                        bin = left
+                        bin.extend(middle)
+                        bin.extend(right)
+                    # Does not fit, create new chunk using the old chunk's counter
+                    else:
+                        left = bin[0:deltas_in_chunk_offset]
+                        middle = bitarray(endian='big')
+                        
+                        middle.extend(self.uint_to_ba(0, D_CNT_SIZE))
+                        # Add full coordinates
+                        middle.frombytes(self.double_to_bytes(pos[0]))
+                        middle.frombytes(self.double_to_bytes(pos[1]))
+                        right = bin[deltas_in_chunk_offset + D_CNT_SIZE:]
+                        bin = left
+                        bin.extend(middle)
+                        bin.extend(right)
+                        bin[chunks_in_ring_offset:chunks_in_ring_offset+RING_CHK_CNT_SIZE] = self.uint_to_ba(chunks_in_ring + 1, RING_CHK_CNT_SIZE)
+                else:
+                    # 
+                break
+            else:
+                # Jump to next chunk
+                p_idx += 1 + deltas_in_chunk
+                self.offset += 64 * 2 + delta_size * 2 * deltas_in_chunk
+                chunks_in_ring_left -= 1
+
+            # A B C D
+              
+              # 1 Första, delta får plats: blir nya start av gamla chunken, bildar kedja efter
+              # 2 Första, delta får inte plats. Ny chunk prependas
+              # 3 Mitten: delta får plats, lägg til direkt, men ändra den efter
+              # 4 Mitten: delta får inte plats, dela gamla chunken i två nya
+              # 5 Sista: delta får plats, lägg till direkt
+              # 6 Sista: delta får inte plats, skapa ny chunk och appenda efter
+
+              # 2, 6 Samma skiljer bara offset där chunk ska läggas till
+              # 3, 5 Samma förutom att 3 behöver ändra den efter
+              # 
+              # Bör fixa så inte start-koordinat finns i både början och slut
+    
+        bin = bin.tobytes()
+        print("HEJ", bin)
         t = time.perf_counter()
         return t - s, bin
 
@@ -373,21 +454,24 @@ def main():
     geom4 = shapely.wkt.loads('POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.184812 55.705646, 13.1848537 55.7057363))')
     geom5 = shapely.wkt.loads('MULTIPOLYGON (((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848861 55.705646, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1847300 55.705712, 13.1847425 55.7057123)), ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848841 55.705626, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1848861 55.705646, 13.1847425 55.7057123)))')
     geom_list = [geom4, geom1, geom2, geom3, geom5]
-    for geom in geom_list:
-       t, bin3 = x.compress(geom)
-       #t, bin3 = x.add_vertex((bin3, 2, [0.2, 0.2]))
-       print(bin3.hex(sep=' '))
-       print(x.type(bin3))
-       t, decomp = x.decompress(bin3)
+    # for geom in geom_list:
+    #    t, bin3 = x.compress(geom)
+    #    #t, bin3 = x.add_vertex((bin3, 2, [0.2, 0.2]))
+    #    print(bin3.hex(sep=' '))
+    #    print(x.type(bin3))
+    #    t, decomp = x.decompress(bin3)
        
-       print(decomp == geom)
+    #    print(decomp == geom)
 
     
-    #faulty_add = shapely.wkt.loads('POLYGON ((13.2287798 55.7140753, 13.2288713 55.713951, 13.2287496 55.7139225, 13.2286938 55.7139984, 13.2287396 55.7140091, 13.228704 55.7140575, 13.2287798 55.7140753))')
-    #t, bin3 = x.compress(faulty_add)
-    #t, bin3 = x.add_vertex((bin3, 6, (13.2, 55.7)))
-    #t, decomp = x.decompress(bin3)
-
+    faulty_add = shapely.wkt.loads('POLYGON ((13.2 55.7140753, 13.2288713 55.713951, 13.2287496 55.7139225, 13.2286938 55.7139984, 13.2287396 55.7140091, 13.228704 55.7140575, 13.2287798 55.7140753))')
+    t, bin3 = x.compress(faulty_add)
+    binary = bitarray()
+    binary.frombytes(bin3)
+    util.pprint(binary)
+    t, bin3 = x.add_vertex((bin3, 0, (13.2287797, 55.7140753)))
+    t, decomp = x.decompress(bin3)
+    print(decomp == faulty_add)
     #print(x.bytes_to_float32(b'0xa70x300x530x41')) 
     #print(bin3.hex(sep=' '))
     #print("-DELTASIZE-_TY_POINTSINCHK_XFIRST-----------------_YFIRST-----------------")
@@ -407,7 +491,9 @@ def main():
     #print(x.get_poly_ring_count(geom5))
 
     #print(len(bytes(shapely.to_wkt(geom4), 'utf-8')), shapely.to_wkt(geom4))
-    print(len(bin3), shapely.to_wkt(decomp))
+    print(shapely.to_wkt(faulty_add, rounding_precision=-1))
+    print(shapely.to_wkt(decomp, rounding_precision=-1))
+    print("LEN COMP", len(bin3))
 
     
 
