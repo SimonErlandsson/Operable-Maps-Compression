@@ -283,11 +283,11 @@ class Fpd(CompressionAlgorithm):
             upper_cnt += bit_cnts[n]
 
         #print({i: tot_size[i] // 8 for i in tot_size.keys()})
-        return min(tot_size, key=tot_size.get)
+        return min(tot_size, key=tot_size.get), bit_cnts
 
     def compress(self, geometry):
         s = time.perf_counter()
-        optimal_size = self.calculate_delta_size(geometry)
+        optimal_size, _ = self.calculate_delta_size(geometry)
         bin = self.fp_delta_encoding(geometry, optimal_size)
         t = time.perf_counter()
         return t - s, bin
