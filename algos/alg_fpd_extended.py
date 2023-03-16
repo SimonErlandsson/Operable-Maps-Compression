@@ -120,7 +120,8 @@ class FpdExtended(CompressionAlgorithm):
         y_bytes = self.uint_to_ba(d_y_zig, d_size)
         bits.extend(x_bytes)
         bits.extend(y_bytes)
-
+        
+    @profile
     def fp_delta_encoding(self, geometry, d_size):
         # TODO: REMOVE!!!
         d_size = 50
@@ -130,9 +131,10 @@ class FpdExtended(CompressionAlgorithm):
         self.append_header(bits, geometry, d_size)
 
         # Type specific variables
-        is_linestring = shapely.get_type_id(geometry) == GT.LINESTRING  
-        is_multipolygon = shapely.get_type_id(geometry) == GT.MULTIPOLYGON
-        is_polygon = shapely.get_type_id(geometry) == GT.POLYGON
+        geo_type = shapely.get_type_id(geometry)
+        is_linestring = geo_type == GT.LINESTRING  
+        is_multipolygon = geo_type == GT.MULTIPOLYGON
+        is_polygon = geo_type == GT.POLYGON
         
         # Fetches number of points in each ring, nestled for multipoly
         poly_buffer = self.point_count(geometry)

@@ -46,17 +46,17 @@ class Fpd(CompressionAlgorithm):
     def double_to_bytes(self, x):
         return struct.pack("!d", x)
     
+     #Inline refactorized from https://github.com/ilanschnell/bitarray/blob/master/bitarray/util.py
     def uint_to_ba(self, x, length):
         if x == 0:
             return util.zeros(length or 1, "big")
-        
         a = bitarray(0, "big")
         a.frombytes(x.to_bytes(bits2bytes(x.bit_length()), byteorder="big"))
         la = len(a)
         if la == length:
             return a
-        
         return a[-length:] if la > length else util.zeros(length - la, "big") + a
+      
      
     def uchar_to_bytes(self, x):
         return x.to_bytes(1, 'big')
@@ -108,8 +108,8 @@ class Fpd(CompressionAlgorithm):
         return delta_size, type   
     
     def append_delta_pair(self, bits, d_x_zig, d_y_zig, d_size):
-        x_bytes = util.int2ba(d_x_zig, d_size, 'big', signed=False)
-        y_bytes = util.int2ba(d_y_zig, d_size, 'big', signed=False)
+        x_bytes = self.uint_to_ba(d_x_zig, d_size)
+        y_bytes = self.uint_to_ba(d_y_zig, d_size)
         bits.extend(x_bytes)
         bits.extend(y_bytes)
     
@@ -120,9 +120,10 @@ class Fpd(CompressionAlgorithm):
         self.append_header(bits, geometry, d_size)
 
         # Type specific variables
-        is_linestring = shapely.get_type_id(geometry) == GT.LINESTRING  
-        is_multipolygon = shapely.get_type_id(geometry) == GT.MULTIPOLYGON
-        is_polygon = shapely.get_type_id(geometry) == GT.POLYGON
+        geotype = shapely.get_type_id(geometry)
+        is_linestring = geotype == GT.LINESTRING  
+        is_multipolygon = geotype == GT.MULTIPOLYGON
+        is_polygon = geotype == GT.POLYGON
         
         # Fetches number of points in each ring, nestled for multipoly
         poly_buffer = self.point_count(geometry)
@@ -377,59 +378,42 @@ class Fpd(CompressionAlgorithm):
 
 
 def main():
+    import random
+    import json
+    import pandas as pd
+    import tqdm
+    from shapely.geometry import shape
+
     x = Fpd()
-    geom1 = shapely.wkt.loads("MULTIPOLYGON (((13.193709 55.7021381, 13.1937743 55.7021279, 13.1938355 55.7021184, 13.1938461 55.702109, 13.1938566 55.7020984, 13.1938611 55.7020902, 13.1938655 55.7020774, 13.1938655 55.7020633, 13.1938583 55.7020408, 13.1938402 55.7020014, 13.1937184 55.7017259, 13.1937008 55.7016876, 13.1936836 55.7016654, 13.1936537 55.7016428, 13.1936223 55.7016242, 13.1935741 55.7016036, 13.1935354 55.7015911, 13.1935006 55.701584, 13.1934829 55.701598, 13.1934673 55.7016115, 13.1934736 55.7016164, 13.1934776 55.7016216, 13.1934875 55.7016633, 13.1934985 55.7016898, 13.1935196 55.7017337, 13.1935659 55.7018353, 13.1936162 55.7018282, 13.1936551 55.7019155, 13.1936651 55.7019377, 13.1936955 55.7020047, 13.1936497 55.7020119, 13.193709 55.7021381)), ((13.1938175 55.7017126, 13.1938602 55.7017068, 13.1939048 55.7017007, 13.1938998 55.7016861, 13.193892 55.7016685, 13.1938831 55.7016589, 13.193871 55.701651, 13.1938602 55.701646, 13.1938405 55.7016438, 13.193822 55.7016456, 13.1938062 55.7016517, 13.1937985 55.7016571, 13.1937953 55.7016646, 13.1937979 55.7016746, 13.1938017 55.7016836, 13.1938052 55.7016908, 13.1938175 55.7017126)), ((13.1940245 55.7019788, 13.19398 55.7019848, 13.1939372 55.7019907, 13.1939585 55.7020383, 13.1939692 55.7020479, 13.1939841 55.7020512, 13.1939975 55.7020519, 13.1940079 55.702051, 13.1940198 55.7020497, 13.1940317 55.7020463, 13.1940395 55.7020422, 13.1940435 55.7020369, 13.1940452 55.7020314, 13.1940457 55.7020218, 13.1940245 55.7019788)), ((13.1939779 55.7015541, 13.1939529 55.701555, 13.1939622 55.7015658, 13.1939755 55.7015942, 13.194075 55.7018201, 13.1941382 55.7019637, 13.1941483 55.7019866, 13.194164 55.7020087, 13.1941899 55.7020304, 13.1942142 55.7020424, 13.1942291 55.7020486, 13.1942638 55.702042, 13.195019 55.7018988, 13.1948681 55.7018923, 13.1944181 55.7018687, 13.1944172 55.7018717, 13.194395 55.7018706, 13.1942164 55.7018622, 13.194172 55.7017564, 13.1941218 55.701761, 13.1941279 55.7017262, 13.1941357 55.7016818, 13.1940872 55.7015737, 13.1940769 55.7015503, 13.1939779 55.7015541), (13.1942341 55.7020059, 13.1942075 55.7020095, 13.1941895 55.7019673, 13.1941696 55.701921, 13.1941936 55.7019177, 13.1941884 55.7019055, 13.19426 55.7018958, 13.1942645 55.7019063, 13.1943172 55.7018991, 13.1943567 55.7019912, 13.1943041 55.7019984, 13.1943086 55.7020089, 13.1942394 55.7020183, 13.1942341 55.7020059)))")
-    geom2 = shapely.wkt.loads("LINESTRING (13.199378 55.7034667, 13.1999441 55.7033986, 13.200125 55.7033882, 13.2002723 55.7033936, 13.2004383 55.7034097, 13.2005935 55.7034211, 13.2007699 55.703423, 13.2011275 55.7034136, 13.2012413 55.7034103, 13.2012947 55.7034088)")
-    geom3 = shapely.wkt.loads('POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848603 55.7056619, 13.1846238 55.7056422, 13.1846085 55.7057159, 13.1846356 55.7057179, 13.1848537 55.7057363), (13.1846694 55.705714, 13.1846543 55.7057128, 13.1846563 55.705705, 13.1846714 55.7057062, 13.1846694 55.705714), (13.1847425 55.7057123, 13.1847405 55.7057201, 13.1847254 55.7057188, 13.1847274 55.705711, 13.1847425 55.7057123), (13.1848001 55.7057179, 13.1848152 55.7057192, 13.1848131 55.705727, 13.1847981 55.7057258, 13.1848001 55.7057179), (13.1848068 55.7056929, 13.1848088 55.7056851, 13.1848239 55.7056863, 13.1848218 55.7056941, 13.1848068 55.7056929), (13.1847507 55.7056878, 13.1847356 55.7056865, 13.1847377 55.7056787, 13.1847528 55.70568, 13.1847507 55.7056878), (13.1846811 55.7056732, 13.184679 55.705681, 13.184664 55.7056798, 13.184666 55.705672, 13.1846811 55.7056732))')
-    geom4 = shapely.wkt.loads('POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.184812 55.705646, 13.1848537 55.7057363))')
-    geom5 = shapely.wkt.loads('MULTIPOLYGON (((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848861 55.705646, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1847300 55.705712, 13.1847425 55.7057123)), ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848841 55.705626, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1848861 55.705646, 13.1847425 55.7057123)))')
-    geom_list = [geom4, geom1, geom2, geom3, geom5]
-    for geom in geom_list:
-       t, bin3 = x.compress(geom)
-       #t, bin3 = x.add_vertex((bin3, 2, [0.2, 0.2]))
-       t, decomp = x.decompress(bin3)
-    # import random
-    # import json
-    # import pandas as pd
-    # import tqdm
-    # from shapely.geometry import shape
+    
 
-    # DATASET_PATH = "data/world.json"
-    # NBR_ITER = 3000
-    # SEED = 123 # If we want to enforce the same ordering and indexes for multiple runs, else None
-    # random.seed(SEED) # Init random
-    # # Extract the nested feature attribute of the geo_json file containing the geometries
-    # with open(DATASET_PATH, 'r') as f:
-    #     data = json.loads(f.read())
-    # file_df: pd.DataFrame = pd.json_normalize(data, record_path=['features'])
-    # # Create a dataframe suitable for the WKT format for easy convertion to shapely objects
-    # df = pd.DataFrame(
-    #     {'type': file_df['geometry.type'], 'coordinates': file_df['geometry.coordinates']})
+    DATASET_PATH = "data/lund_building_highway.json"
+    #DATASET_PATH = "data/world.json"
+    NBR_ITER = 16000
 
-    # max_idx = len(df) - 1
-    # unary_idxs = [random.randint(0, max_idx) for i in range(NBR_ITER)] # Generate list of indexes to query on
-    # binary_idxs = [(random.randint(0, max_idx), random.randint(0, max_idx)) for i in range(NBR_ITER)] # Generate pair of indexes to query on. # TODO: Better selection than random
-    # random.seed(SEED) # Reset random
 
-    # # Compress files, benchmark unaries
-    # for idx in tqdm.tqdm(unary_idxs): # List of single idxs
-    #     t, bin = x.compress(shape(df.iloc[idx]))
-    #     t, geom = x.decompress(bin)
+    SEED = 123 # If we want to enforce the same ordering and indexes for multiple runs, else None
+    random.seed(SEED) # Init random
 
-    ragged = shapely.to_ragged_array([geom4])
-    l = []
-    l.append(geom4.exterior.coords[:])
-    for interior in geom4.interiors:
-        l.append(interior.coords[:])
+    # Extract the nested feature attribute of the geo_json file containing the geometries
+    with open(DATASET_PATH, 'r') as f:
+        data = json.loads(f.read())
+    file_df: pd.DataFrame = pd.json_normalize(data, record_path=['features'])
+    # Create a dataframe suitable for the WKT format for easy convertion to shapely objects
+    df = pd.DataFrame(
+        {'type': file_df['geometry.type'], 'coordinates': file_df['geometry.coordinates']})
 
-    wkt = shapely.to_wkt(geom4)
-    wkb = shapely.to_wkb(geom4)
+    max_idx = len(df) - 1
+    unary_idxs = [random.randint(0, max_idx) for i in range(NBR_ITER)] # Generate list of indexes to query on
+    random.seed(SEED) # Reset random
 
-    shapely.from_ragged_array(ragged[0], ragged[1], ragged[2])
-    shapely.Polygon(l[0], l[1:])
-    shapely.from_wkt(wkt)
-    shapely.from_wkb(wkb)
-    shapely.get_coordinates(geom4)
+    # Compress files, benchmark unaries
+    for idx in tqdm.tqdm(unary_idxs): # List of single idxs
+        t, comp = x.compress(shape(df.iloc[idx]))
+        t, decomp = x.decompress(comp)
+        if(shape(df.iloc[idx]) != decomp):
+            print("FAIL")
+        
 
 
     
