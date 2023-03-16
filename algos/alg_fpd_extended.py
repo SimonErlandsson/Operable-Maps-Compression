@@ -107,7 +107,7 @@ class FpdExtended(CompressionAlgorithm):
         bits.frombytes(self.uchar_to_bytes(int(shapely.get_type_id(geometry)))) # 1 byte is enough for storing type
 
         # Bounding Box
-        #(shapely.bounds(geometry))
+        #print(shapely.bounds(geometry))
     
     def decode_header(self, bin):
         delta_size, type = struct.unpack_from('!BB', bin)
@@ -123,8 +123,6 @@ class FpdExtended(CompressionAlgorithm):
         
     @profile
     def fp_delta_encoding(self, geometry, d_size):
-        # TODO: REMOVE!!!
-        d_size = 50
         # List of resulting bytes.
         bits = bitarray(endian='big')
         # Init with 'd_size', 'geom_type'
@@ -149,6 +147,12 @@ class FpdExtended(CompressionAlgorithm):
         
         # Loop all coordinates
         for x, y in shapely.get_coordinates(geometry):
+            if not is_linestring and rem_points_ring == 1: # Is the whole ring processed? We skip last coordinate
+                # Store number of chunks used for the ring
+                rem_points_ring = 0
+                bits[num_chks_ring_idx:num_chks_ring_idx+RING_CHK_CNT_SIZE] = self.uint_to_ba(num_chks_ring, RING_CHK_CNT_SIZE)
+                num_chks_ring = 0
+                continue # Skip last coordinate
             d_x_zig = self.get_zz_encoded_delta(prev_x, x) # Calculated delta based on previous iteration
             d_y_zig = self.get_zz_encoded_delta(prev_y, y)
             prev_x, prev_y = (x, y)
@@ -193,10 +197,6 @@ class FpdExtended(CompressionAlgorithm):
                     
             # Coord has been processed, remove it
             rem_points_ring -= 1
-            if not is_linestring and rem_points_ring == 0: # Is the whole ring processed?
-                # Store number of chunks used for the ring
-                bits[num_chks_ring_idx:num_chks_ring_idx+RING_CHK_CNT_SIZE] = self.uint_to_ba(num_chks_ring, RING_CHK_CNT_SIZE)
-                num_chks_ring = 0
 
         # All points processed. Update size of final chunk
         bits[chk_deltas_idx:chk_deltas_idx+D_CNT_SIZE] = self.uint_to_ba(chk_deltas, D_CNT_SIZE)
@@ -354,6 +354,7 @@ class FpdExtended(CompressionAlgorithm):
     def add_vertex(self, args):
         bin_in, insert_idx, pos = args
         s = time.perf_counter()
+        return s, bin_in
 
         self.offset = 0
         bin = bitarray(endian='big')
@@ -416,7 +417,8 @@ class FpdExtended(CompressionAlgorithm):
                         bin.extend(right)
                         bin[chunks_in_ring_offset:chunks_in_ring_offset+RING_CHK_CNT_SIZE] = self.uint_to_ba(chunks_in_ring + 1, RING_CHK_CNT_SIZE)
                 else:
-                    print("") 
+                    pass
+                    # 
                 break
             else:
                 # Jump to next chunk
@@ -427,9 +429,16 @@ class FpdExtended(CompressionAlgorithm):
             # A B C D
               
               # 1 Första, delta får plats: blir nya start av gamla chunken, bildar kedja efter
+                # - Skapa chunk: <left: counter r pos> counter s: 1 + r, s, delta s, r <right: counter r pos + D_SIZE_CHUNK + 2 * 64>
               # 2 Första, delta får inte plats. Ny chunk prependas
-              # 3 Mitten: delta får plats, lägg til direkt, men ändra den efter
+                # - Skapa chunk: <left: counter r pos> counter s (0), s <right: counter r pos>
+                # - Uppdater count av antal chunks för ring
+              # 3 Mitten: delta innan får plats, lägg til direkt, men ändra den efter
+                # - Två deltas <left: counter r pos + D_SIZE_CHUNK + 64 * 2 + D_SIZE * n> s, d: s_(n+1) <right: left pos + D_SIZE>
+                # - Uppdater CNT av antal deltas i chunk
               # 4 Mitten: delta får inte plats, dela gamla chunken i två nya
+                # - Skapa chunk: <left: counter r pos+ D_SIZE_CHUNK + 64 * 2 + D_SIZE * n> counter s (0), s <right: counter r pos>
+                    # Måste även hantera om deltat efter inte får plats...
               # 5 Sista: delta får plats, lägg till direkt
               # 6 Sista: delta får inte plats, skapa ny chunk och appenda efter
 
@@ -437,6 +446,13 @@ class FpdExtended(CompressionAlgorithm):
               # 3, 5 Samma förutom att 3 behöver ändra den efter
               # 
               # Bör fixa så inte start-koordinat finns i både början och slut
+
+              #def add_chunk(bin, left_pos, right_pos, try_merge_left, try_merge_left)
+
+              # MVP:
+              # Lägg till en ny chunk som består av enbart den nya koordinaten. Delar den gamla i två nya chunks (fall 4)
+                # Skapa bara ny del-chunk om inte slut på höger eller vänster
+            
     
         bin = bin.tobytes()
         t = time.perf_counter()
