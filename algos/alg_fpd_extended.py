@@ -104,14 +104,17 @@ class FpdExtended(CompressionAlgorithm):
         # Meta data
         bits.frombytes(self.uchar_to_bytes(d_size))
         bits.frombytes(self.uchar_to_bytes(int(shapely.get_type_id(geometry))))  # 1 byte is enough for storing type
-
         # Bounding Box
-        # print(shapely.bounds(geometry))
-
+        bounds = shapely.bounds(geometry)
+        bits.frombytes(self.double_to_bytes(bounds[0]))
+        bits.frombytes(self.double_to_bytes(bounds[1]))
+        bits.frombytes(self.double_to_bytes(bounds[2]))
+        bits.frombytes(self.double_to_bytes(bounds[3]))
+        
     def decode_header(self, bin):
         delta_size, type = struct.unpack_from('!BB', bin)
         type = GT(type)
-        self.offset += 2 * 8  # Offset is 2 bytes for BB
+        self.offset += 2 * 8 + 4 * 64  # Offset is 2 bytes for BB + 64 * 4 for bounding box
         return delta_size, type
 
     def append_delta_pair(self, bits, d_x_zig, d_y_zig, d_size):
@@ -227,14 +230,12 @@ class FpdExtended(CompressionAlgorithm):
         # Extract reset point
         x = self.bytes_to_double(bin)
         y = self.bytes_to_double(bin)
-        print(x, y)
         seq_list.append((x, y))
         # Loop through deltas in chunk
         for _ in range(chk_size):
             x = self.bytes_to_decoded_coord(bin, x, delta_size)
             y = self.bytes_to_decoded_coord(bin, y, delta_size)
             seq_list.append((x, y))
-            print(x, y)
 
     def ring_decoder(self, bin, polygon_list, delta_size):
         # Extract number of chunks for a ring
@@ -264,17 +265,17 @@ class FpdExtended(CompressionAlgorithm):
         binary_length = len(bin)
         coords = []
         if type == GT.LINESTRING:
-            while (self.offset + 8 < binary_length):  # While != EOF
+            while (self.offset + 16 < binary_length):  # While != EOF
                 self.sequence_decoder(bin, coords, delta_size)
             geometry = shapely.LineString(coords)
 
         elif type == GT.POLYGON:
-            while (self.offset + 8 < binary_length):  # While != EOF, i.e. at least one byte left
+            while (self.offset + 16 < binary_length):  # While != EOF, i.e. at least one byte left
                 self.ring_decoder(bin, coords, delta_size)
             geometry = shapely.Polygon(shell=coords[0], holes=coords[1:])
 
         elif type == GT.MULTIPOLYGON:
-            while (self.offset + 8 < binary_length):  # While != EOF
+            while (self.offset + 16 < binary_length):  # While != EOF
                 self.polygon_decoder(bin, coords, delta_size)
             geometry = shapely.MultiPolygon(coords)
         return geometry
@@ -325,10 +326,49 @@ class FpdExtended(CompressionAlgorithm):
 
 # ---- UNARY ---- #
 
-    def vertices(self, bin):
+    def vertices(self, bin_in):
         s = time.perf_counter()
-        _, geometry = self.decompress(bin)
-        coords = shapely.get_coordinates(geometry)
+        
+        coords = []
+        self.offset = 0
+        bin = bitarray(endian='big')
+        bin.frombytes(bin_in)
+
+        delta_size, type = self.decode_header(bin)
+        # Type specific variables
+        is_linestring = type == GT.LINESTRING
+        is_multipolygon = type == GT.MULTIPOLYGON
+
+        chunks_in_ring_left = 0  # Used for iteration
+        chunks_in_ring = 0
+        rings_left = 0
+        bin_len = len(bin)
+        while (self.offset + 16 < bin_len):
+            if is_multipolygon and rings_left == 0:
+                rings_left = self.bytes_to_uint(bin, POLY_RING_CNT_SIZE)
+            if not is_linestring and chunks_in_ring_left == 0:
+                chunks_in_ring_left = self.bytes_to_uint(bin, RING_CHK_CNT_SIZE)
+                chunks_in_ring = chunks_in_ring_left
+
+            # Go through chunk (inlined sequence decode)
+            deltas_in_chunk = self.bytes_to_uint(bin, D_CNT_SIZE)
+            # Extract reset point
+            x = self.bytes_to_double(bin)
+            y = self.bytes_to_double(bin)
+            if chunks_in_ring_left == chunks_in_ring:
+                x_ring, y_ring = (x, y)
+            coords.append([x, y])
+            # Loop through deltas in chunk
+            for _ in range(deltas_in_chunk):
+                x = self.bytes_to_decoded_coord(bin, x, delta_size)
+                y = self.bytes_to_decoded_coord(bin, y, delta_size)
+                coords.append([x, y])
+            chunks_in_ring_left -= 1
+            if chunks_in_ring_left == 0:
+                coords.append([x_ring, y_ring])
+        
+        coords = np.array(coords)
+
         t = time.perf_counter()
         return t - s, coords
 
@@ -346,11 +386,13 @@ class FpdExtended(CompressionAlgorithm):
 
     def bounding_box(self, bin):
         s = time.perf_counter()
-        _, geometry = self.decompress(bin)
-        bounds = shapely.bounds(geometry)
+        
+        bounds = list(struct.unpack_from('!dddd', bin, offset=2)) # Skip first part of header
+
         t = time.perf_counter()
         return t - s, bounds
 
+    # TODO: Handle bounding box
     def add_vertex(self, args):
         bin_in, insert_idx, pos = args
         s = time.perf_counter()
@@ -379,9 +421,7 @@ class FpdExtended(CompressionAlgorithm):
                 chunks_in_ring_left = self.bytes_to_uint(bin, RING_CHK_CNT_SIZE)
                 chunks_in_ring = chunks_in_ring_left
             deltas_in_chunk_offset = self.offset
-            print(p_idx)
             deltas_in_chunk = self.bytes_to_uint(bin, D_CNT_SIZE)
-            print(deltas_in_chunk)
 
             def create_chunk(reset_point, delta_cnt=0):
                 middle = bitarray(endian='big')
@@ -402,15 +442,13 @@ class FpdExtended(CompressionAlgorithm):
                     x = self.bytes_to_decoded_coord(bin, x, delta_size)
                     y = self.bytes_to_decoded_coord(bin, y, delta_size)
                 self.offset = old_offset
-                print("hhh", x, y)
                 return (x, y)
             # print(p_idx, deltas_in_chunk, insert_idx)
             # Found chunk to append/prepend?
-            print("hhdashh", p_idx, deltas_in_chunk, 1 if chunks_in_ring_left == 1 else 0)
             if p_idx <= insert_idx and insert_idx <= p_idx + deltas_in_chunk + (1 if chunks_in_ring_left == 1 else 0):
                 deltas_left = max(insert_idx - p_idx - 1, 0)
                 deltas_right = deltas_in_chunk - deltas_left
-                print(deltas_left, deltas_right)
+                #print(deltas_left, deltas_right)
                 # Handle left
                 if p_idx != insert_idx:  # Has a left coordinate?
                     split = deltas_in_chunk_offset + D_CNT_SIZE + 64 * 2 + delta_size * 2 * deltas_left
@@ -480,11 +518,9 @@ class FpdExtended(CompressionAlgorithm):
                 break
             else:
                 # Jump to next chunk
-                print("llll", p_idx)
                 p_idx += 1 + deltas_in_chunk + (1 if chunks_in_ring_left == 1 else 0)
                 self.offset += 64 * 2 + delta_size * 2 * deltas_in_chunk
                 chunks_in_ring_left -= 1
-                print("llll", p_idx)
 
                 if self.offset >= bin_len and is_linestring:
                     # Reached end without appending: is linestring!
@@ -518,7 +554,6 @@ class FpdExtended(CompressionAlgorithm):
             # MVP:
             # Lägg till en ny chunk som består av enbart den nya koordinaten. Delar den gamla i två nya chunks (fall 4)
             # Skapa bara ny del-chunk om inte slut på höger eller vänster
-        print(bin)
         bin = bin.tobytes()
         t = time.perf_counter()
         return t - s, bin
@@ -568,16 +603,18 @@ def main():
 
     #    print(decomp == geom)
 
-    faulty_add = shapely.wkt.loads(
-        'POLYGON ((13.2288713 55.713951, 13.2287496 55.7139225, 13.2286938 55.7139984, 13.2287396 55.7140091, 13.228704 55.7140575, 13.2287798 55.7140753, 13.2288713 55.713951))')
-    faulty_add = geom2
+    faulty_add = shapely.wkt.loads('POLYGON ((13.1948358 55.7202146, 13.1948222 55.7201619, 13.19485 55.7201605, 13.1950544 55.72015, 13.1950566 55.7201627, 13.1950679 55.7202269, 13.1950494 55.720227, 13.195037 55.7202706, 13.1950151 55.7202973, 13.1949752 55.7203157, 13.1949257 55.7203314, 13.1948712 55.7203365, 13.1948402 55.7203393, 13.1948 55.720343, 13.1947972 55.7203333, 13.1946787 55.7203443, 13.1945924 55.7203522, 13.1945976 55.7203702, 13.1944086 55.7203873, 13.1943905 55.7203184, 13.1944804 55.7203102, 13.1944776 55.7203004, 13.1945399 55.7202947, 13.19453 55.7202607, 13.1945931 55.7202549, 13.194588 55.7202375, 13.1948358 55.7202146))')
+
+    #faulty_add = geom2
     t, bin3 = x.compress(faulty_add)
     # binary = bitarray()
     # binary.frombytes(bin3)
     # util.pprint(binary)
-    t, bin3 = x.add_vertex((bin3, 5, (13.2, 55.7)))
+    add_ifx = 17
+    t, bin3 = x.add_vertex((bin3, add_ifx, (13.1945576, 55.7203302)))
+    print(x.vertices(bin3)) 
     t, decomp = x.decompress(bin3)
-    print(decomp == faulty_add)
+
     # print(x.bytes_to_float32(b'0xa70x300x530x41'))
     # print(bin3.hex(sep=' '))
     # print("-DELTASIZE-_TY_POINTSINCHK_XFIRST-----------------_YFIRST-----------------")
@@ -598,7 +635,17 @@ def main():
     # print(len(bytes(shapely.to_wkt(geom4), 'utf-8')), shapely.to_wkt(geom4))
     print(shapely.to_wkt(faulty_add, rounding_precision=-1))
     print(shapely.to_wkt(decomp, rounding_precision=-1))
-    print("LEN COMP", len(bin3))
+   #print("LEN COMP", len(bin3))
+
+    fpd = Fpd()
+    _, org = fpd.compress(faulty_add)
+    _, org = fpd.add_vertex((org, add_ifx, (13.196935700000001, 55.6907853)))
+
+    _, de = fpd.decompress(org)   
+    print(decomp == de)
+    print(shapely.to_wkt(de, rounding_precision=-1))
+
+    print(x.bounding_box(bin3))
 
     return
 

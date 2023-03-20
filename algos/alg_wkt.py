@@ -61,12 +61,20 @@ class Wkt(CompressionAlgorithm):
         
         _, geometry = self.decompress(bin)
         ragged = shapely.to_ragged_array([geometry])
-        points = np.insert(ragged[1], insert_idx, pos, axis=0) 
-   
+        points = ragged[1]
+        is_linestring = shapely.get_type_id(geometry) == shapely.GeometryType.LINESTRING
+
         # Use binary search O(log n) to find the index of the first element greater than insert_idx
-        increase_idx = bisect.bisect_right(ragged[2][0], insert_idx)
-        for i in range(increase_idx, len(ragged[2][0])):
-            ragged[2][0][i] += 1
+        end_idx = min(len(ragged[2][0]) - 1, bisect.bisect_right(ragged[2][0], insert_idx))
+
+        # Is the first coordinate in the ring?
+        if ragged[2][0][end_idx - 1] == insert_idx and not is_linestring:
+                points = np.delete(points, ragged[2][0][end_idx] - 1, axis=0)
+        else:
+            for i in range(end_idx, len(ragged[2][0])):
+                    ragged[2][0][i] += 1
+                    
+        points = np.insert(points, insert_idx, pos, axis=0)        
  
         geometry = shapely.from_ragged_array(geometry_type=shapely.get_type_id(geometry), coords=points, offsets=ragged[2])[0]
         _, bin = self.compress(geometry)

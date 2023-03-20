@@ -342,12 +342,20 @@ class Fpd(CompressionAlgorithm):
 
         _, geometry = self.decompress(bin)
         ragged = shapely.to_ragged_array([geometry])
-        points = np.insert(ragged[1], insert_idx, pos, axis=0) 
-   
+        points = ragged[1]
+        is_linestring = shapely.get_type_id(geometry) == shapely.GeometryType.LINESTRING
+
         # Use binary search O(log n) to find the index of the first element greater than insert_idx
-        increase_idx = bisect.bisect_right(ragged[2][0], insert_idx)
-        for i in range(increase_idx, len(ragged[2][0])):
-            ragged[2][0][i] += 1
+        end_idx = min(len(ragged[2][0]) - 1, bisect.bisect_right(ragged[2][0], insert_idx))
+
+        # Is the first coordinate in the ring?
+        if ragged[2][0][end_idx - 1] == insert_idx and not is_linestring:
+                points = np.delete(points, ragged[2][0][end_idx] - 1, axis=0)
+        else:
+            for i in range(end_idx, len(ragged[2][0])):
+                    ragged[2][0][i] += 1
+                    
+        points = np.insert(points, insert_idx, pos, axis=0)        
  
         geometry = shapely.from_ragged_array(geometry_type=shapely.get_type_id(geometry), coords=points, offsets=ragged[2])[0]
         _, bin = self.compress(geometry)
@@ -384,8 +392,19 @@ def main():
     import tqdm
     from shapely.geometry import shape
 
-    x = Fpd()
+    geom4 = shapely.wkt.loads('MULTIPOLYGON (((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848861 55.705646, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1847300 55.705712, 13.1847425 55.7057123)), ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848841 55.705626, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1848861 55.705646, 13.1847425 55.7057123)))')
+    geom4 = shapely.wkt.loads('POLYGON ((13.1969457 55.6906953, 13.197008 55.6906875, 13.1971208 55.6906735, 13.1971913 55.6906647, 13.1971772 55.6906286, 13.1971097 55.690637, 13.1970943 55.6905975, 13.1969816 55.6906115, 13.1969958 55.6906479, 13.1969304 55.6906561, 13.1969457 55.6906953))')
     
+    fpd = Fpd()
+    _, org = fpd.compress(geom4)
+    _, org = fpd.add_vertex((org, 0, (13.19693570000000, 55.6907853)))
+    _, de = fpd.decompress(org)   
+    print(shapely.to_wkt(de, rounding_precision=-1))
+    print('POLYGON ((13.196936 55.690785, 13.196946 55.690695, 13.197008 55.690688, 13.197121 55.690674, 13.197191 55.690665, 13.197177 55.690629, 13.19711 55.690637, 13.197094 55.690598, 13.196982 55.690612, 13.196996 55.690648, 13.19693 55.690656, 13.196946 55.690695, 13.196936 55.690785))')
+    print(shapely.to_wkt(geom4, rounding_precision=-1))
+
+    x = Fpd()
+    return
 
     DATASET_PATH = "data/lund_building_highway.json"
     #DATASET_PATH = "data/world.json"
