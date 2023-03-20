@@ -7,7 +7,7 @@ sys.path.append(str(root))
 
 from algos.base import CompressionAlgorithm
 from algos.predictors.predictor_base import PredictorFunction
-from algos.predictors.identity_predictor import SimplePredictor
+from algos.predictors.simple_predictor import SimplePredictor
 from collections import deque
 import shapely
 import shapely.wkt
@@ -76,6 +76,7 @@ class FpdExtended(CompressionAlgorithm):
         return - num // 2 if num & 1 == 1 else num // 2
 
     def get_zz_encoded_delta(self, prev_coords, curr_coord):
+        #Uses normal fp-delta encoding if no predictor has been set
         pred_coord = prev_coords[-1] if self.predictor == None else self.predictor.predict(prev_coords)
         return self.zz_encode(self.double_as_long(curr_coord) - self.double_as_long(pred_coord))
 
@@ -157,7 +158,8 @@ class FpdExtended(CompressionAlgorithm):
                 continue  # Skip last coordinate
             d_x_zig = self.get_zz_encoded_delta(prev_xs, x)  # Calculated delta based on previous iteration
             d_y_zig = self.get_zz_encoded_delta(prev_ys, y)
-            prev_xs.append(x)
+        
+            prev_xs.append(x) #Adds coordinates to possible predictions for upcoming deltas
             prev_ys.append(y)
 
 
@@ -194,14 +196,16 @@ class FpdExtended(CompressionAlgorithm):
                 # Add full coordinates
                 bits.frombytes(self.double_to_bytes(x))
                 bits.frombytes(self.double_to_bytes(y))
-                prev_xs, prev_ys = [x], [y]
+                prev_xs, prev_ys = [x], [y] # Reset points used to predict future points. Makes predictions chunk isolated
 
             else:
                 # Delta fits, append it
                 self.append_delta_pair(bits, d_x_zig, d_y_zig, d_size)
+                chk_deltas += 1
+
+                #Adds coordinates to possible predictions for upcoming deltas 
                 prev_xs.append(x)
                 prev_ys.append(y)
-                chk_deltas += 1
 
             # Coord has been processed, remove it
             rem_points_ring -= 1
@@ -216,7 +220,7 @@ class FpdExtended(CompressionAlgorithm):
     def bytes_to_decoded_coord(self, bin, prev_coord, input_size=64):
         bin = bin[self.offset: self.offset + input_size]
         val = util.ba2int(bin, signed=False)
-        pred_coord = prev_coord[-1] if self.predictor == None else self.predictor.predict(prev_coord)
+        pred_coord = prev_coord[-1] if self.predictor == None else self.predictor.predict(prev_coord)  #Uses normal fp-delta encoding if no predictor has been set
         val = self.zz_decode(val) + self.double_as_long(pred_coord)
         val = self.long_as_double(val)
         prev_coord.append(val)
@@ -297,7 +301,7 @@ class FpdExtended(CompressionAlgorithm):
     def calculate_delta_size(self, geometry):
         RESET_POINT_SIZE = 64 * 2 + D_CNT_SIZE
         coords = shapely.get_coordinates(geometry)
-        prev = [[0], [0]]
+        prev = [[0], [0]] #prev[0] is x-coordinates and prev[1] is y-coordinates. Format as matrix to satisfy self.get_zz_encoded_delta
         bit_cnts = {}
         for coord in coords:
             bit_cnt = 0
@@ -327,7 +331,9 @@ class FpdExtended(CompressionAlgorithm):
     def compress(self, geometry):
         s = time.perf_counter()
         optimal_size = self.calculate_delta_size(geometry)
-        self.set_predictor(SimplePredictor())
+
+        self.set_predictor(SimplePredictor()) #Sets and activate predictor function after self.calculate_delta_size()
+
         bin = self.fp_delta_encoding(geometry, optimal_size)
         t = time.perf_counter()
         return t - s, bin
