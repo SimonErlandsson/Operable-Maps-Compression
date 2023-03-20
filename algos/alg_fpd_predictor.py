@@ -36,7 +36,7 @@ RING_CHK_CNT_SIZE = 16
 MAX_NUM_DELTAS = 10  # Max number of deltas in a chunk before split
 
 
-class FpdExtended(CompressionAlgorithm):
+class FpdPredictor(CompressionAlgorithm):
     offset = 0  # Used when parsing
     predictor = None
 
@@ -250,7 +250,6 @@ class FpdExtended(CompressionAlgorithm):
         for _ in range(chk_size):
             x = self.bytes_to_decoded_coord(bin, prev_xs, delta_size)
             y = self.bytes_to_decoded_coord(bin, prev_ys, delta_size)
-            print(x)
             seq_list.append((x, y))
             prev_xs.append(x)
             prev_ys.append(y)
@@ -307,6 +306,7 @@ class FpdExtended(CompressionAlgorithm):
             bit_cnt = 0
             for i in range(2):
                 d = self.get_zz_encoded_delta(prev[i], coord[i])
+                prev[i].append(coord[i])
                 d_bit_cnt = 1 if d == 0 else math.ceil(math.log2(d))
                 bit_cnt = max(bit_cnt, d_bit_cnt)
 
@@ -314,7 +314,6 @@ class FpdExtended(CompressionAlgorithm):
                 bit_cnts[bit_cnt] = 1
             else:
                 bit_cnts[bit_cnt] += 1
-            prev = [[coord[0]],[coord[1]]]
         bit_cnts = dict(sorted(bit_cnts.items(), reverse=True))
 
         tot_size = {}
@@ -330,10 +329,8 @@ class FpdExtended(CompressionAlgorithm):
 
     def compress(self, geometry):
         s = time.perf_counter()
-        optimal_size = self.calculate_delta_size(geometry)
-
         self.set_predictor(SimplePredictor()) #Sets and activate predictor function after self.calculate_delta_size()
-
+        optimal_size = self.calculate_delta_size(geometry)
         bin = self.fp_delta_encoding(geometry, optimal_size)
         t = time.perf_counter()
         return t - s, bin
@@ -377,174 +374,21 @@ class FpdExtended(CompressionAlgorithm):
         return t - s, bounds
 
     def add_vertex(self, args):
-        bin_in, insert_idx, pos = args
+        bin, insert_idx, pos = args
         s = time.perf_counter()
 
-        self.offset = 0
-        bin = bitarray(endian='big')
-        bin.frombytes(bin_in)
-
-        delta_size, type = self.decode_header(bin)
-        # Type specific variables
-        is_linestring = type == GT.LINESTRING
-        is_multipolygon = type == GT.MULTIPOLYGON
-        is_polygon = type == GT.POLYGON
-
-        p_idx = 0
-        chunks_in_ring_left = 0  # Used for iteration
-        chunks_in_ring = 0  # Cache for store later
-        chunks_in_ring_idx = 0
-        rings_left = 0
-        bin_len = len(bin)
-        while (p_idx <= insert_idx):
-            if is_multipolygon and rings_left == 0:
-                rings_left = self.bytes_to_uint(bin, POLY_RING_CNT_SIZE)
-            if not is_linestring and chunks_in_ring_left == 0:
-                chunks_in_ring_offset = self.offset
-                chunks_in_ring_left = self.bytes_to_uint(bin, RING_CHK_CNT_SIZE)
-                chunks_in_ring = chunks_in_ring_left
-            deltas_in_chunk_offset = self.offset
-            print(p_idx)
-            deltas_in_chunk = self.bytes_to_uint(bin, D_CNT_SIZE)
-            print(deltas_in_chunk)
-
-            def create_chunk(reset_point, delta_cnt=0):
-                middle = bitarray(endian='big')
-                middle.extend(self.uint_to_ba(delta_cnt, D_CNT_SIZE))
-                # Add full coordinates
-                middle.frombytes(self.double_to_bytes(reset_point[0]))
-                middle.frombytes(self.double_to_bytes(reset_point[1]))
-                return middle
-
-            # Supply the offset to D_CNT, and idx is the index within the chunk
-            def access_point_chk(bin, chk_offset, idx):
-                old_offset = self.offset
-                self.offset = chk_offset + D_CNT_SIZE
-                # Extract reset point
-                x, y = (self.bytes_to_double(bin), self.bytes_to_double(bin))
-                # Loop through deltas in chunk
-                for _ in range(idx):
-                    x = self.bytes_to_decoded_coord(bin, x, delta_size)
-                    y = self.bytes_to_decoded_coord(bin, y, delta_size)
-                self.offset = old_offset
-                print("hhh", x, y)
-                return (x, y)
-            # print(p_idx, deltas_in_chunk, insert_idx)
-            # Found chunk to append/prepend?
-            print("hhdashh", p_idx, deltas_in_chunk, 1 if chunks_in_ring_left == 1 else 0)
-            if p_idx <= insert_idx and insert_idx <= p_idx + deltas_in_chunk + (1 if chunks_in_ring_left == 1 else 0):
-                deltas_left = max(insert_idx - p_idx - 1, 0)
-                deltas_right = deltas_in_chunk - deltas_left
-                print(deltas_left, deltas_right)
-                # Handle left
-                if p_idx != insert_idx:  # Has a left coordinate?
-                    split = deltas_in_chunk_offset + D_CNT_SIZE + 64 * 2 + delta_size * 2 * deltas_left
-                    # Update delta cnt
-                    bin[deltas_in_chunk_offset:deltas_in_chunk_offset + D_CNT_SIZE] = self.uint_to_ba(deltas_left, D_CNT_SIZE)
-                else:
-                    split = deltas_in_chunk_offset
-
-                middle = create_chunk(pos)
-                chunks_in_ring += 1
-
-                # Handle chunk tail
-                if deltas_right > 0 and p_idx != insert_idx:
-                    # Get the absolute coordinate for first right coordinate
-                    rst_p = access_point_chk(bin, deltas_in_chunk_offset, insert_idx - p_idx)
-                    right = create_chunk(rst_p, deltas_right - 1)
-                    # Append old tail, without the one extracted point
-                    right.extend(bin[split + delta_size * 2:])
-                    chunks_in_ring += 1
-                else:
-                    right = bin[split:]
-
-                left = bin[0:split]
-                if not is_linestring:
-                    left[chunks_in_ring_offset:chunks_in_ring_offset + RING_CHK_CNT_SIZE] = self.uint_to_ba(chunks_in_ring, RING_CHK_CNT_SIZE)
-                bin = left
-                bin.extend(middle)
-                bin.extend(right)
-
-                # # Is first (reset)?
-                # if p_idx == insert_idx:
-                #     # Does the delta to the old reset point fit? -> The added point becomes the reset
-                #     reset_point = (self.bytes_to_double(bin), self.bytes_to_double(bin))
-                #     d_x = self.get_zz_encoded_delta(pos[0], reset_point[0])
-                #     d_y = self.get_zz_encoded_delta(pos[1], reset_point[1])
-                #     if self.deltas_fit_in_bits(d_x, d_y, delta_size):
-                #         left = bin[0:deltas_in_chunk_offset]
-                #         middle = bitarray(endian='big')
-
-                #         middle.extend(self.uint_to_ba(deltas_in_chunk + 1, D_CNT_SIZE))
-                #         # Add full coordinates
-                #         middle.frombytes(self.double_to_bytes(pos[0]))
-                #         middle.frombytes(self.double_to_bytes(pos[1]))
-                #         self.append_delta_pair(middle, d_x, d_y, delta_size)
-
-                #         right = bin[deltas_in_chunk_offset + D_CNT_SIZE + 64 * 2:]
-                #         bin = left
-                #         bin.extend(middle)
-                #         bin.extend(right)
-                #     # Does not fit, create new chunk using the old chunk's counter
-                #     else:
-                #         left = bin[0:deltas_in_chunk_offset]
-                #         middle = bitarray(endian='big')
-
-                #         middle.extend(self.uint_to_ba(0, D_CNT_SIZE))
-                #         # Add full coordinates
-                #         middle.frombytes(self.double_to_bytes(pos[0]))
-                #         middle.frombytes(self.double_to_bytes(pos[1]))
-                #         right = bin[deltas_in_chunk_offset + D_CNT_SIZE:]
-                #         bin = left
-                #         bin.extend(middle)
-                #         bin.extend(right)
-                #         bin[chunks_in_ring_offset:chunks_in_ring_offset + RING_CHK_CNT_SIZE] = self.uint_to_ba(chunks_in_ring + 1, RING_CHK_CNT_SIZE)
-                # else:
-                #     pass
-                #     #
-                break
-            else:
-                # Jump to next chunk
-                print("llll", p_idx)
-                p_idx += 1 + deltas_in_chunk + (1 if chunks_in_ring_left == 1 else 0)
-                self.offset += 64 * 2 + delta_size * 2 * deltas_in_chunk
-                chunks_in_ring_left -= 1
-                print("llll", p_idx)
-
-                if self.offset >= bin_len and is_linestring:
-                    # Reached end without appending: is linestring!
-                    new = create_chunk(pos)
-                    bin.extend(new)
-                    break
-
-            # A B C D
-
-            # 1 Första, delta får plats: blir nya start av gamla chunken, bildar kedja efter
-            # - Skapa chunk: <left: counter r pos> counter s: 1 + r, s, delta s, r <right: counter r pos + D_SIZE_CHUNK + 2 * 64>
-            # 2 Första, delta får inte plats. Ny chunk prependas
-            # - Skapa chunk: <left: counter r pos> counter s (0), s <right: counter r pos>
-            # - Uppdater count av antal chunks för ring
-            # 3 Mitten: delta innan får plats, lägg til direkt, men ändra den efter
-            # - Två deltas <left: counter r pos + D_SIZE_CHUNK + 64 * 2 + D_SIZE * n> s, d: s_(n+1) <right: left pos + D_SIZE>
-            # - Uppdater CNT av antal deltas i chunk
-            # 4 Mitten: delta får inte plats, dela gamla chunken i två nya
-            # - Skapa chunk: <left: counter r pos+ D_SIZE_CHUNK + 64 * 2 + D_SIZE * n> counter s (0), s <right: counter r pos>
-            # Måste även hantera om deltat efter inte får plats...
-            # 5 Sista: delta får plats, lägg till direkt
-            # 6 Sista: delta får inte plats, skapa ny chunk och appenda efter
-
-            # 2, 6 Samma skiljer bara offset där chunk ska läggas till
-            # 3, 5 Samma förutom att 3 behöver ändra den efter
-            #
-            # Bör fixa så inte start-koordinat finns i både början och slut
-
-            # def add_chunk(bin, left_pos, right_pos, try_merge_left, try_merge_left)
-
-            # MVP:
-            # Lägg till en ny chunk som består av enbart den nya koordinaten. Delar den gamla i två nya chunks (fall 4)
-            # Skapa bara ny del-chunk om inte slut på höger eller vänster
-        print(bin)
-        bin = bin.tobytes()
+        _, geometry = self.decompress(bin)
+        ragged = shapely.to_ragged_array([geometry])
+        points = np.insert(ragged[1], insert_idx, pos, axis=0) 
+   
+        # Use binary search O(log n) to find the index of the first element greater than insert_idx
+        increase_idx = bisect.bisect_right(ragged[2][0], insert_idx)
+        for i in range(increase_idx, len(ragged[2][0])):
+            ragged[2][0][i] += 1
+ 
+        geometry = shapely.from_ragged_array(geometry_type=shapely.get_type_id(geometry), coords=points, offsets=ragged[2])[0]
+        _, bin = self.compress(geometry)
+        
         t = time.perf_counter()
         return t - s, bin
 
@@ -574,7 +418,7 @@ def main():
     import tqdm
     from shapely.geometry import shape
     from alg_fpd import Fpd
-    x = FpdExtended()
+    x = FpdPredictor()
 
     geom1 = shapely.wkt.loads("MULTIPOLYGON (((13.193709 55.7021381, 13.1937743 55.7021279, 13.1938355 55.7021184, 13.1938461 55.702109, 13.1938566 55.7020984, 13.1938611 55.7020902, 13.1938655 55.7020774, 13.1938655 55.7020633, 13.1938583 55.7020408, 13.1938402 55.7020014, 13.1937184 55.7017259, 13.1937008 55.7016876, 13.1936836 55.7016654, 13.1936537 55.7016428, 13.1936223 55.7016242, 13.1935741 55.7016036, 13.1935354 55.7015911, 13.1935006 55.701584, 13.1934829 55.701598, 13.1934673 55.7016115, 13.1934736 55.7016164, 13.1934776 55.7016216, 13.1934875 55.7016633, 13.1934985 55.7016898, 13.1935196 55.7017337, 13.1935659 55.7018353, 13.1936162 55.7018282, 13.1936551 55.7019155, 13.1936651 55.7019377, 13.1936955 55.7020047, 13.1936497 55.7020119, 13.193709 55.7021381)), ((13.1938175 55.7017126, 13.1938602 55.7017068, 13.1939048 55.7017007, 13.1938998 55.7016861, 13.193892 55.7016685, 13.1938831 55.7016589, 13.193871 55.701651, 13.1938602 55.701646, 13.1938405 55.7016438, 13.193822 55.7016456, 13.1938062 55.7016517, 13.1937985 55.7016571, 13.1937953 55.7016646, 13.1937979 55.7016746, 13.1938017 55.7016836, 13.1938052 55.7016908, 13.1938175 55.7017126)), ((13.1940245 55.7019788, 13.19398 55.7019848, 13.1939372 55.7019907, 13.1939585 55.7020383, 13.1939692 55.7020479, 13.1939841 55.7020512, 13.1939975 55.7020519, 13.1940079 55.702051, 13.1940198 55.7020497, 13.1940317 55.7020463, 13.1940395 55.7020422, 13.1940435 55.7020369, 13.1940452 55.7020314, 13.1940457 55.7020218, 13.1940245 55.7019788)), ((13.1939779 55.7015541, 13.1939529 55.701555, 13.1939622 55.7015658, 13.1939755 55.7015942, 13.194075 55.7018201, 13.1941382 55.7019637, 13.1941483 55.7019866, 13.194164 55.7020087, 13.1941899 55.7020304, 13.1942142 55.7020424, 13.1942291 55.7020486, 13.1942638 55.702042, 13.195019 55.7018988, 13.1948681 55.7018923, 13.1944181 55.7018687, 13.1944172 55.7018717, 13.194395 55.7018706, 13.1942164 55.7018622, 13.194172 55.7017564, 13.1941218 55.701761, 13.1941279 55.7017262, 13.1941357 55.7016818, 13.1940872 55.7015737, 13.1940769 55.7015503, 13.1939779 55.7015541), (13.1942341 55.7020059, 13.1942075 55.7020095, 13.1941895 55.7019673, 13.1941696 55.701921, 13.1941936 55.7019177, 13.1941884 55.7019055, 13.19426 55.7018958, 13.1942645 55.7019063, 13.1943172 55.7018991, 13.1943567 55.7019912, 13.1943041 55.7019984, 13.1943086 55.7020089, 13.1942394 55.7020183, 13.1942341 55.7020059)))")
     geom2 = shapely.wkt.loads(
