@@ -65,7 +65,7 @@ class Fpd(CompressionAlgorithm):
         return -2 * num - 1 if num < 0 else 2 * num
     
     def zz_decode(self, num):
-        return - num // 2 if num & 1 == 1 else num // 2
+        return - (num + 1) // 2 if num & 1 == 1 else num // 2
     
     def get_zz_encoded_delta(self, prev_coord, curr_coord):
         return self.zz_encode(self.double_as_long(curr_coord) - self.double_as_long(prev_coord))
@@ -268,7 +268,8 @@ class Fpd(CompressionAlgorithm):
             geometry = shapely.MultiPolygon(coords)
         return geometry
     
-    def calculate_delta_size(self, geometry):
+    def calculate_delta_size(self, geometry, return_deltas = False):
+        deltas = []
         RESET_POINT_SIZE = 64 * 2 + D_CNT_SIZE
         coords = shapely.get_coordinates(geometry)
         prev = [0, 0]
@@ -279,6 +280,8 @@ class Fpd(CompressionAlgorithm):
                 d = self.get_zz_encoded_delta(prev[i], coord[i])
                 d_bit_cnt = 1 if d == 0 else math.ceil(math.log2(d))
                 bit_cnt = max(bit_cnt, d_bit_cnt)
+                if return_deltas:
+                    deltas.append(coord[i] - prev[i])
                 
             if bit_cnt not in bit_cnts:
                 bit_cnts[bit_cnt] = 1
@@ -296,12 +299,12 @@ class Fpd(CompressionAlgorithm):
             upper_cnt += bit_cnts[n]
 
         #print({i: tot_size[i] // 8 for i in tot_size.keys()})
-        return min(tot_size, key=tot_size.get)
+        return min(tot_size, key=tot_size.get), bit_cnts, deltas
 
         
     def compress(self, geometry):
         s = time.perf_counter()
-        optimal_size = self.calculate_delta_size(geometry)
+        optimal_size, _ = self.calculate_delta_size(geometry)
         bin = self.fp_delta_encoding(geometry, optimal_size)
         t = time.perf_counter()
         return t - s, bin

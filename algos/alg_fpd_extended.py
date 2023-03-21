@@ -70,7 +70,7 @@ class FpdExtended(CompressionAlgorithm):
         return -2 * num - 1 if num < 0 else 2 * num
 
     def zz_decode(self, num):
-        return - num // 2 if num & 1 == 1 else num // 2
+        return - (num + 1) // 2 if num & 1 == 1 else num // 2
 
     def get_zz_encoded_delta(self, prev_coord, curr_coord):
         return self.zz_encode(self.double_as_long(curr_coord) - self.double_as_long(prev_coord))
@@ -280,7 +280,8 @@ class FpdExtended(CompressionAlgorithm):
             geometry = shapely.MultiPolygon(coords)
         return geometry
 
-    def calculate_delta_size(self, geometry):
+    def calculate_delta_size(self, geometry, return_deltas = False):
+        deltas = []
         RESET_POINT_SIZE = 64 * 2 + D_CNT_SIZE
         coords = shapely.get_coordinates(geometry)
         prev = [0, 0]
@@ -291,6 +292,8 @@ class FpdExtended(CompressionAlgorithm):
                 d = self.get_zz_encoded_delta(prev[i], coord[i])
                 d_bit_cnt = 1 if d == 0 else math.ceil(math.log2(d))
                 bit_cnt = max(bit_cnt, d_bit_cnt)
+                if return_deltas:
+                    deltas.append(coord[i] - prev[i])
 
             if bit_cnt not in bit_cnts:
                 bit_cnts[bit_cnt] = 1
@@ -308,11 +311,11 @@ class FpdExtended(CompressionAlgorithm):
             upper_cnt += bit_cnts[n]
 
         # print({i: tot_size[i] // 8 for i in tot_size.keys()})
-        return min(tot_size, key=tot_size.get)
+        return min(tot_size, key=tot_size.get), bit_cnt, deltas
 
     def compress(self, geometry):
         s = time.perf_counter()
-        optimal_size = self.calculate_delta_size(geometry)
+        optimal_size, _, _ = self.calculate_delta_size(geometry)
         bin = self.fp_delta_encoding(geometry, optimal_size)
         t = time.perf_counter()
         return t - s, bin
@@ -343,7 +346,7 @@ class FpdExtended(CompressionAlgorithm):
         chunks_in_ring = 0
         rings_left = 0
         bin_len = len(bin)
-        while (self.offset + 16 < bin_len):
+        while (self.offset + 32 < bin_len):
             if is_multipolygon and rings_left == 0:
                 rings_left = self.bytes_to_uint(bin, POLY_RING_CNT_SIZE)
             if not is_linestring and chunks_in_ring_left == 0:
@@ -394,6 +397,26 @@ class FpdExtended(CompressionAlgorithm):
 
     # TODO: Handle bounding box
     def add_vertex(self, args):
+        def create_chunk(reset_point, delta_cnt=0):
+                middle = bitarray(endian='big')
+                middle.extend(self.uint_to_ba(delta_cnt, D_CNT_SIZE))
+                # Add full coordinates
+                middle.frombytes(self.double_to_bytes(reset_point[0]))
+                middle.frombytes(self.double_to_bytes(reset_point[1]))
+                return middle
+
+        # Supply the offset to D_CNT, and idx is the index within the chunk
+        def access_point_chk(bin, chk_offset, idx):
+            old_offset = self.offset
+            self.offset = chk_offset + D_CNT_SIZE
+            # Extract reset point
+            x, y = (self.bytes_to_double(bin), self.bytes_to_double(bin))
+            # Loop through deltas in chunk
+            for _ in range(idx):
+                x = self.bytes_to_decoded_coord(bin, x, delta_size)
+                y = self.bytes_to_decoded_coord(bin, y, delta_size)
+            self.offset = old_offset
+            return (x, y)
         bin_in, insert_idx, pos = args
         s = time.perf_counter()
 
@@ -422,27 +445,7 @@ class FpdExtended(CompressionAlgorithm):
                 chunks_in_ring = chunks_in_ring_left
             deltas_in_chunk_offset = self.offset
             deltas_in_chunk = self.bytes_to_uint(bin, D_CNT_SIZE)
-
-            def create_chunk(reset_point, delta_cnt=0):
-                middle = bitarray(endian='big')
-                middle.extend(self.uint_to_ba(delta_cnt, D_CNT_SIZE))
-                # Add full coordinates
-                middle.frombytes(self.double_to_bytes(reset_point[0]))
-                middle.frombytes(self.double_to_bytes(reset_point[1]))
-                return middle
-
-            # Supply the offset to D_CNT, and idx is the index within the chunk
-            def access_point_chk(bin, chk_offset, idx):
-                old_offset = self.offset
-                self.offset = chk_offset + D_CNT_SIZE
-                # Extract reset point
-                x, y = (self.bytes_to_double(bin), self.bytes_to_double(bin))
-                # Loop through deltas in chunk
-                for _ in range(idx):
-                    x = self.bytes_to_decoded_coord(bin, x, delta_size)
-                    y = self.bytes_to_decoded_coord(bin, y, delta_size)
-                self.offset = old_offset
-                return (x, y)
+            
             # print(p_idx, deltas_in_chunk, insert_idx)
             # Found chunk to append/prepend?
             if p_idx <= insert_idx and insert_idx <= p_idx + deltas_in_chunk + (1 if chunks_in_ring_left == 1 else 0):

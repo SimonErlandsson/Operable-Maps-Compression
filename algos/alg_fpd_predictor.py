@@ -8,6 +8,7 @@ sys.path.append(str(root))
 from algos.base import CompressionAlgorithm
 from algos.predictors.predictor_base import PredictorFunction
 from algos.predictors.simple_predictor import SimplePredictor
+from algos.predictors.prev_delta_predictor import PrevDeltaPredictor
 from collections import deque
 import shapely
 import shapely.wkt
@@ -38,7 +39,7 @@ MAX_NUM_DELTAS = 10  # Max number of deltas in a chunk before split
 
 class FpdPredictor(CompressionAlgorithm):
     offset = 0  # Used when parsing
-    predictor = None
+    predictor = PrevDeltaPredictor()
 
 # ---- HELPER METHODS
 
@@ -78,6 +79,7 @@ class FpdPredictor(CompressionAlgorithm):
     def get_zz_encoded_delta(self, prev_coords, curr_coord):
         #Uses normal fp-delta encoding if no predictor has been set
         pred_coord = prev_coords[-1] if self.predictor == None else self.predictor.predict(prev_coords)
+        prev_coords.append(curr_coord)
         return self.zz_encode(self.double_as_long(curr_coord) - self.double_as_long(pred_coord))
 
     def deltas_fit_in_bits(self, d_x, d_y, max_bits):
@@ -159,10 +161,6 @@ class FpdPredictor(CompressionAlgorithm):
             d_x_zig = self.get_zz_encoded_delta(prev_xs, x)  # Calculated delta based on previous iteration
             d_y_zig = self.get_zz_encoded_delta(prev_ys, y)
         
-            prev_xs.append(x) #Adds coordinates to possible predictions for upcoming deltas
-            prev_ys.append(y)
-
-
             # ---- CREATE NEW CHUNK? If 'first chunk', 'delta doesn't fit', 'new ring', or 'reached max deltas'
             if chk_deltas_idx == 0 or not self.deltas_fit_in_bits(d_x_zig, d_y_zig, d_size) or rem_points_ring == 0 or chk_deltas == MAX_NUM_DELTAS:
                 # If not 'first chunk' -> save previous chunk's size
@@ -201,11 +199,8 @@ class FpdPredictor(CompressionAlgorithm):
             else:
                 # Delta fits, append it
                 self.append_delta_pair(bits, d_x_zig, d_y_zig, d_size)
-                chk_deltas += 1
 
-                #Adds coordinates to possible predictions for upcoming deltas 
-                prev_xs.append(x)
-                prev_ys.append(y)
+                chk_deltas += 1
 
             # Coord has been processed, remove it
             rem_points_ring -= 1
@@ -217,13 +212,13 @@ class FpdPredictor(CompressionAlgorithm):
         # print([int.from_bytes(i, 'big') for i in bytes], '\n')
         return bits.tobytes()
 
-    def bytes_to_decoded_coord(self, bin, prev_coord, input_size=64):
+    def bytes_to_decoded_coord(self, bin, prev_coords, input_size=64):
         bin = bin[self.offset: self.offset + input_size]
         val = util.ba2int(bin, signed=False)
-        pred_coord = prev_coord[-1] if self.predictor == None else self.predictor.predict(prev_coord)  #Uses normal fp-delta encoding if no predictor has been set
+        pred_coord = prev_coords[-1] if self.predictor == None else self.predictor.predict(prev_coords)  #Uses normal fp-delta encoding if no predictor has been set
         val = self.zz_decode(val) + self.double_as_long(pred_coord)
         val = self.long_as_double(val)
-        prev_coord.append(val)
+        prev_coords.append(val)
         self.offset += input_size
         return val
 
@@ -251,9 +246,7 @@ class FpdPredictor(CompressionAlgorithm):
             x = self.bytes_to_decoded_coord(bin, prev_xs, delta_size)
             y = self.bytes_to_decoded_coord(bin, prev_ys, delta_size)
             seq_list.append((x, y))
-            prev_xs.append(x)
-            prev_ys.append(y)
-
+          
     def ring_decoder(self, bin, polygon_list, delta_size):
         # Extract number of chunks for a ring
         chks_in_ring = self.bytes_to_uint(bin, RING_CHK_CNT_SIZE)
@@ -297,7 +290,8 @@ class FpdPredictor(CompressionAlgorithm):
             geometry = shapely.MultiPolygon(coords)
         return geometry
 
-    def calculate_delta_size(self, geometry):
+    def calculate_delta_size(self, geometry, return_deltas = False):
+        deltas = []
         RESET_POINT_SIZE = 64 * 2 + D_CNT_SIZE
         coords = shapely.get_coordinates(geometry)
         prev = [[0], [0]] #prev[0] is x-coordinates and prev[1] is y-coordinates. Format as matrix to satisfy self.get_zz_encoded_delta
@@ -305,11 +299,13 @@ class FpdPredictor(CompressionAlgorithm):
         for coord in coords:
             bit_cnt = 0
             for i in range(2):
+                if return_deltas:
+                    deltas.append(prev[i][-1] if self.predictor == None else self.predictor.predict(prev[i]))
+
                 d = self.get_zz_encoded_delta(prev[i], coord[i])
-                prev[i].append(coord[i])
                 d_bit_cnt = 1 if d == 0 else math.ceil(math.log2(d))
                 bit_cnt = max(bit_cnt, d_bit_cnt)
-
+                
             if bit_cnt not in bit_cnts:
                 bit_cnts[bit_cnt] = 1
             else:
@@ -325,12 +321,11 @@ class FpdPredictor(CompressionAlgorithm):
             upper_cnt += bit_cnts[n]
 
         # print({i: tot_size[i] // 8 for i in tot_size.keys()})
-        return min(tot_size, key=tot_size.get)
+        return min(tot_size, key=tot_size.get), bit_cnts, deltas
 
     def compress(self, geometry):
         s = time.perf_counter()
-        self.set_predictor(SimplePredictor()) #Sets and activate predictor function after self.calculate_delta_size()
-        optimal_size = self.calculate_delta_size(geometry)
+        optimal_size, _ = self.calculate_delta_size(geometry)
         bin = self.fp_delta_encoding(geometry, optimal_size)
         t = time.perf_counter()
         return t - s, bin
@@ -340,9 +335,6 @@ class FpdPredictor(CompressionAlgorithm):
         geometry = self.fp_delta_decoding(bin)
         t = time.perf_counter()
         return t - s, geometry
-    
-    def set_predictor(self, predictor:PredictorFunction):
-        self.predictor = predictor
 
 
 # ---- UNARY ---- #
@@ -379,12 +371,20 @@ class FpdPredictor(CompressionAlgorithm):
 
         _, geometry = self.decompress(bin)
         ragged = shapely.to_ragged_array([geometry])
-        points = np.insert(ragged[1], insert_idx, pos, axis=0) 
-   
+        points = ragged[1]
+        is_linestring = shapely.get_type_id(geometry) == shapely.GeometryType.LINESTRING
+
         # Use binary search O(log n) to find the index of the first element greater than insert_idx
-        increase_idx = bisect.bisect_right(ragged[2][0], insert_idx)
-        for i in range(increase_idx, len(ragged[2][0])):
-            ragged[2][0][i] += 1
+        end_idx = min(len(ragged[2][0]) - 1, bisect.bisect_right(ragged[2][0], insert_idx))
+
+        # Is the first coordinate in the ring?
+        if ragged[2][0][end_idx - 1] == insert_idx and not is_linestring:
+                points = np.delete(points, ragged[2][0][end_idx] - 1, axis=0)
+        else:
+            for i in range(end_idx, len(ragged[2][0])):
+                    ragged[2][0][i] += 1
+                    
+        points = np.insert(points, insert_idx, pos, axis=0)        
  
         geometry = shapely.from_ragged_array(geometry_type=shapely.get_type_id(geometry), coords=points, offsets=ragged[2])[0]
         _, bin = self.compress(geometry)
