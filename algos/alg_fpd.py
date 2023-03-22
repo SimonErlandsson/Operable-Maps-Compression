@@ -304,7 +304,7 @@ class Fpd(CompressionAlgorithm):
         
     def compress(self, geometry):
         s = time.perf_counter()
-        optimal_size, _ = self.calculate_delta_size(geometry)
+        optimal_size, _, _ = self.calculate_delta_size(geometry)
         bin = self.fp_delta_encoding(geometry, optimal_size)
         t = time.perf_counter()
         return t - s, bin
