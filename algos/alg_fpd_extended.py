@@ -112,12 +112,34 @@ class FpdExtended(CompressionAlgorithm):
         bits.frombytes(self.double_to_bytes(bounds[1]))
         bits.frombytes(self.double_to_bytes(bounds[2]))
         bits.frombytes(self.double_to_bytes(bounds[3]))
+
+        coords = shapely.get_coordinates(geometry)
+        bits.extend(self.uint_to_ba(int(len(coords)), 4 * 8)) #size of integer
+        sorted_idxs = [np.argsort([coord[0] for coord in coords]), np.argsort([coord[1] for coord in coords])]
+        idx_bits = math.ceil(math.log2(len(coords)))
+        for i in range(2):
+            for idx in range(len(coords)):
+                bits.extend(self.uint_to_ba(int(sorted_idxs[i][idx]), idx_bits))
+
         
-    def decode_header(self, bin):
+    def decode_header(self, bin, get_idxs = False):
         delta_size, type = struct.unpack_from('!BB', bin)
         type = GT(type)
         self.offset += 2 * 8 + 4 * 64  # Offset is 2 bytes for BB + 64 * 4 for bounding box
+        
+        #Code segment needed for extracting sorted indexes
+        coord_count = self.bytes_to_uint(bin, 4 * 8)
+        idx_sizes = math.ceil(math.log2(coord_count))
+        sorted_idxs = [[],[]]
+        if get_idxs:
+            for i in range(2):
+                for _ in range(coord_count):
+                    sorted_idxs[i].append(self.bytes_to_uint(bin, idx_sizes))
+            return delta_size, type, sorted_idxs
+        else:
+            self.offset += idx_sizes * 2 * coord_count
         return delta_size, type
+
 
     def append_delta_pair(self, bits, d_x_zig, d_y_zig, d_size):
         x_bytes = self.uint_to_ba(d_x_zig, d_size)
@@ -484,43 +506,6 @@ class FpdExtended(CompressionAlgorithm):
                 bin.extend(middle)
                 bin.extend(right)
 
-                # # Is first (reset)?
-                # if p_idx == insert_idx:
-                #     # Does the delta to the old reset point fit? -> The added point becomes the reset
-                #     reset_point = (self.bytes_to_double(bin), self.bytes_to_double(bin))
-                #     d_x = self.get_zz_encoded_delta(pos[0], reset_point[0])
-                #     d_y = self.get_zz_encoded_delta(pos[1], reset_point[1])
-                #     if self.deltas_fit_in_bits(d_x, d_y, delta_size):
-                #         left = bin[0:deltas_in_chunk_offset]
-                #         middle = bitarray(endian='big')
-
-                #         middle.extend(self.uint_to_ba(deltas_in_chunk + 1, D_CNT_SIZE))
-                #         # Add full coordinates
-                #         middle.frombytes(self.double_to_bytes(pos[0]))
-                #         middle.frombytes(self.double_to_bytes(pos[1]))
-                #         self.append_delta_pair(middle, d_x, d_y, delta_size)
-
-                #         right = bin[deltas_in_chunk_offset + D_CNT_SIZE + 64 * 2:]
-                #         bin = left
-                #         bin.extend(middle)
-                #         bin.extend(right)
-                #     # Does not fit, create new chunk using the old chunk's counter
-                #     else:
-                #         left = bin[0:deltas_in_chunk_offset]
-                #         middle = bitarray(endian='big')
-
-                #         middle.extend(self.uint_to_ba(0, D_CNT_SIZE))
-                #         # Add full coordinates
-                #         middle.frombytes(self.double_to_bytes(pos[0]))
-                #         middle.frombytes(self.double_to_bytes(pos[1]))
-                #         right = bin[deltas_in_chunk_offset + D_CNT_SIZE:]
-                #         bin = left
-                #         bin.extend(middle)
-                #         bin.extend(right)
-                #         bin[chunks_in_ring_offset:chunks_in_ring_offset + RING_CHK_CNT_SIZE] = self.uint_to_ba(chunks_in_ring + 1, RING_CHK_CNT_SIZE)
-                # else:
-                #     pass
-                #     #
                 break
             else:
                 # Jump to next chunk
