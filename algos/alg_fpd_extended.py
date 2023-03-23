@@ -431,6 +431,56 @@ class FpdExtended(CompressionAlgorithm):
 
         t = time.perf_counter()
         return t - s, bounds
+    
+    # Supply cache if used repeatedly for same shape
+    def access_vertex(self, bin_in, access_idx, cache=None):
+        old_offset = self.offset
+        self.offset = 0
+        bin = bitarray(endian='big')
+        bin.frombytes(bin_in)
+
+        delta_size, type = self.decode_header(bin)
+        # Type specific variables
+        is_linestring = type == GT.LINESTRING
+        is_multipolygon = type == GT.MULTIPOLYGON
+
+        p_idx = 0
+        chunks_in_ring_left = 0  # Used for iteration
+        rings_left = 0
+        while (p_idx <= access_idx):
+            if is_multipolygon and rings_left == 0:
+                rings_left = self.bytes_to_uint(bin, POLY_RING_CNT_SIZE)
+            if not is_linestring and chunks_in_ring_left == 0:
+                chunks_in_ring_left = self.bytes_to_uint(bin, RING_CHK_CNT_SIZE)
+            deltas_in_chunk_offset = self.offset
+            deltas_in_chunk = self.bytes_to_uint(bin, D_CNT_SIZE)
+            
+            # Found chunk containing vertex?
+            if p_idx <= access_idx and access_idx <= p_idx + deltas_in_chunk:
+                x, y, cache = self.access_vertex_chk(bin, deltas_in_chunk_offset, access_idx - p_idx, delta_size, cache)
+                break
+            else:
+                # Jump to next chunk
+                p_idx += 1 + deltas_in_chunk
+                self.offset += 64 * 2 + delta_size * 2 * deltas_in_chunk
+                chunks_in_ring_left -= 1
+                if (chunks_in_ring_left == 0):
+                    rings_left -= 1
+        self.offset = old_offset
+        return x, y, cache
+    
+    # Supply the offset to D_CNT, and idx is the index within the chunk
+    def access_vertex_chk(self, bin, chk_offset, idx, delta_size, cache=None):
+        old_offset = self.offset
+        self.offset = chk_offset + D_CNT_SIZE
+        # Extract reset point
+        x, y = (self.bytes_to_double(bin), self.bytes_to_double(bin))
+        # Loop through deltas in chunk
+        for _ in range(idx):
+            x = self.bytes_to_decoded_coord(bin, x, delta_size)
+            y = self.bytes_to_decoded_coord(bin, y, delta_size)
+        self.offset = old_offset
+        return x, y, cache
 
     # TODO: Handle bounding box
     def add_vertex(self, args):
@@ -442,18 +492,6 @@ class FpdExtended(CompressionAlgorithm):
                 middle.frombytes(self.double_to_bytes(reset_point[1]))
                 return middle
 
-        # Supply the offset to D_CNT, and idx is the index within the chunk
-        def access_point_chk(bin, chk_offset, idx):
-            old_offset = self.offset
-            self.offset = chk_offset + D_CNT_SIZE
-            # Extract reset point
-            x, y = (self.bytes_to_double(bin), self.bytes_to_double(bin))
-            # Loop through deltas in chunk
-            for _ in range(idx):
-                x = self.bytes_to_decoded_coord(bin, x, delta_size)
-                y = self.bytes_to_decoded_coord(bin, y, delta_size)
-            self.offset = old_offset
-            return (x, y)
         bin_in, insert_idx, pos = args
         s = time.perf_counter()
 
@@ -465,12 +503,10 @@ class FpdExtended(CompressionAlgorithm):
         # Type specific variables
         is_linestring = type == GT.LINESTRING
         is_multipolygon = type == GT.MULTIPOLYGON
-        is_polygon = type == GT.POLYGON
 
         p_idx = 0
         chunks_in_ring_left = 0  # Used for iteration
         chunks_in_ring = 0  # Cache for store later
-        chunks_in_ring_idx = 0
         rings_left = 0
         bin_len = len(bin)
         while (p_idx <= insert_idx):
@@ -503,7 +539,7 @@ class FpdExtended(CompressionAlgorithm):
                 # Handle chunk tail
                 if deltas_right > 0 and p_idx != insert_idx:
                     # Get the absolute coordinate for first right coordinate
-                    rst_p = access_point_chk(bin, deltas_in_chunk_offset, insert_idx - p_idx)
+                    rst_p, _ = self.access_vertex_chk(bin, deltas_in_chunk_offset, insert_idx - p_idx, delta_size)
                     right = create_chunk(rst_p, deltas_right - 1)
                     # Append old tail, without the one extracted point
                     right.extend(bin[split + delta_size * 2:])
@@ -607,9 +643,10 @@ def main():
         'POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.184812 55.705646, 13.1848537 55.7057363))')
     geom5 = shapely.wkt.loads('MULTIPOLYGON (((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848861 55.705646, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1847300 55.705712, 13.1847425 55.7057123)), ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848841 55.705626, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1848861 55.705646, 13.1847425 55.7057123)))')
     geom_list = [geom2, geom4]
-    t, bin3 = x.compress(geom2)
+    t, bin3 = x.compress(geom5)
+    print(x.access_vertex(bin3, 3))
     t, bin4 = x.compress(geom4)
-    print(x.intersection((bin3, bin4)))
+    #print(x.intersection((bin3, bin4)))
     #t, bin3 = x.add_vertex((bin3, 2, [0.2, 0.2]))
       
     t, decomp = x.decompress(bin3)
