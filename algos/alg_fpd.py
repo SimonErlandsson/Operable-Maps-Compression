@@ -269,7 +269,7 @@ class Fpd(CompressionAlgorithm):
         return geometry
     
     def calculate_delta_size(self, geometry, return_deltas = False):
-        deltas = [[], []]
+        deltas = [[], [], [[], []]]
         RESET_POINT_SIZE = 64 * 2 + D_CNT_SIZE
         coords = shapely.get_coordinates(geometry)
         prev = [0, 0]
@@ -283,6 +283,7 @@ class Fpd(CompressionAlgorithm):
                 if return_deltas:
                     deltas[0].append(coord[i] - prev[i])
                     deltas[1].append(d)
+                    deltas[2][i].append(coord[i])
                 
             if bit_cnt not in bit_cnts:
                 bit_cnts[bit_cnt] = 1
