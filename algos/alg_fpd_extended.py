@@ -467,7 +467,7 @@ class FpdExtended(CompressionAlgorithm):
                 if (chunks_in_ring_left == 0):
                     rings_left -= 1
         self.offset = old_offset
-        return x, y, cache
+        return (x, y), cache
     
     # Supply the offset to D_CNT, and idx is the index within the chunk
     def access_vertex_chk(self, bin, chk_offset, idx, delta_size, cache=None):
@@ -480,7 +480,7 @@ class FpdExtended(CompressionAlgorithm):
             x = self.bytes_to_decoded_coord(bin, x, delta_size)
             y = self.bytes_to_decoded_coord(bin, y, delta_size)
         self.offset = old_offset
-        return x, y, cache
+        return (x, y), cache
 
     # TODO: Handle bounding box
     def add_vertex(self, args):
