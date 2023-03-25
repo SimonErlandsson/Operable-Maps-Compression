@@ -31,14 +31,13 @@ D_CNT_SIZE = 16
 POLY_RING_CNT_SIZE = 16
 RING_CHK_CNT_SIZE = 16
 
-MAX_NUM_DELTAS = 10  # Max number of deltas in a chunk before split
+MAX_NUM_DELTAS = 15  # Max number of deltas in a chunk before split
 
 EOF_THRESHOLD = D_CNT_SIZE + 64 * 2 # Number of bits required to continue parsing
 
 
 class FpdExtended(CompressionAlgorithm):
     offset = 0  # Used when parsing
-
 # ---- HELPER METHODS
 
     def double_as_long(self, num):
@@ -443,13 +442,20 @@ class FpdExtended(CompressionAlgorithm):
         return t - s, bounds
     
     # Supply cache if used repeatedly for same shape
+    #@profile
     def access_vertex(self, bin_in, access_idx, cache=None, getBoundsData=False):
+        if not getBoundsData and access_idx in cache:
+            return cache[access_idx], cache, None
         old_offset = self.offset
         self.offset = 0
         bin = bitarray(endian='big')
         bin.frombytes(bin_in)
 
-        delta_size, type = self.decode_header(bin)
+        if 'header' in cache:
+            delta_size, type = cache['header']
+            self.offset = cache['offset']
+        else:
+            delta_size, type = self.decode_header(bin)
         # Type specific variables
         is_linestring = type == GT.LINESTRING
         is_multipolygon = type == GT.MULTIPOLYGON
@@ -480,7 +486,7 @@ class FpdExtended(CompressionAlgorithm):
             # Found chunk containing vertex?
             if not idx_found and (p_idx <= access_idx and access_idx <= p_idx + deltas_in_chunk):
                 idx_found = True
-                (x, y), cache = self.access_vertex_chk(bin, deltas_in_chunk_offset, access_idx - p_idx, delta_size, cache)
+                (x, y), cache = self.access_vertex_chk(bin, deltas_in_chunk_offset, access_idx - p_idx, delta_size, cache, offset_idx=p_idx)
                 if not getBoundsData:
                     break
 
@@ -503,15 +509,24 @@ class FpdExtended(CompressionAlgorithm):
     
 
     # Supply the offset to D_CNT, and idx is the index within the chunk
-    def access_vertex_chk(self, bin, chk_offset, idx, delta_size, cache=None):
+    #@profile
+    def access_vertex_chk(self, bin, chk_offset, idx, delta_size, cache=None, offset_idx = 0):
+        if cache != None and idx + offset_idx in cache:
+            return cache[idx + offset_idx], cache
         old_offset = self.offset
         self.offset = chk_offset + D_CNT_SIZE
         # Extract reset point
         x, y = (self.bytes_to_double(bin), self.bytes_to_double(bin))
         # Loop through deltas in chunk
-        for _ in range(idx):
-            x = self.bytes_to_decoded_coord(bin, x, delta_size)
-            y = self.bytes_to_decoded_coord(bin, y, delta_size)
+        for idx in range(idx):
+            if cache != None and idx + offset_idx in cache:
+                self.offset += delta_size * 2
+                (x, y) = cache[idx + offset_idx]
+            else:
+                x = self.bytes_to_decoded_coord(bin, x, delta_size)
+                y = self.bytes_to_decoded_coord(bin, y, delta_size)
+                if cache != None:
+                    cache[idx + offset_idx] = (x, y)
         self.offset = old_offset
         return (x, y), cache
 
@@ -637,6 +652,8 @@ class FpdExtended(CompressionAlgorithm):
 
  # ------------------------ HELPERS FOR INTERSECTION ------------------------
 
+    #Calculates intersecting bounding box area boundries
+    #@profile
     def get_bounds_intersect(self, bound_min1, bound_min2, bound_max1, bound_max2):
         if bound_min1 <= bound_min2 and bound_max1 <= bound_max2 and bound_max1 >= bound_min2:
             return (bound_min2, bound_max1)
@@ -647,92 +664,124 @@ class FpdExtended(CompressionAlgorithm):
         elif bound_min2 >= bound_min1 and bound_max2 <= bound_max1:
             return (bound_min2, bound_max2)
         else:
-            return (None, None)
-    
-    def binary_search_min_bound(self, bin, sorted_indicies, bound_right, for_x):
+            return (None, None) #In case they are not overlapping
+    #@profile
+    def binary_search_min_bound(self, bin, sorted_indicies, bound_right, cache, for_x):
         hi, lo = len(sorted_indicies) - 1, 0
-        if self.access_vertex(bin, sorted_indicies[hi])[0][0 if for_x else 1] < bound_right:
+        x_or_y = 0 if for_x else 1
+        coord, cache, _ = self.access_vertex(bin, sorted_indicies[hi], cache)
+        if coord[x_or_y] < bound_right:
             return None
         while lo < hi:
             mid = (lo+hi)//2
-            if bound_right <= self.access_vertex(bin, sorted_indicies[mid])[0][0 if for_x else 1]: hi = mid
+            coord, cache, _ = self.access_vertex(bin, sorted_indicies[mid], cache)
+            if bound_right <= coord[x_or_y]: hi = mid
             else: lo = mid+1
-        return lo
-
-    def binary_search_max_bound(self, bin,  sorted_indicies, bound_left, for_x):
+        return lo, cache
+    
+    #@profile
+    def binary_search_max_bound(self, bin,  sorted_indicies, bound_left, cache, for_x):
         hi, lo = len(sorted_indicies) - 1, 0
-        if self.access_vertex(bin, sorted_indicies[lo])[0][0 if for_x else 1] > bound_left:
+        x_or_y = 0 if for_x else 1
+        coord, cache, _ = self.access_vertex(bin, sorted_indicies[lo], cache)
+        if coord[x_or_y] > bound_left:
             return None
         while lo < hi:
             mid = math.ceil((lo+hi)/2)
-            if self.access_vertex(bin, sorted_indicies[mid])[0][0 if for_x else 1] > bound_left: hi = mid - 1
+            coord, cache, _ = self.access_vertex(bin, sorted_indicies[mid], cache)
+            if coord[x_or_y] > bound_left: hi = mid - 1
             else: lo = mid
-        return lo
+        return lo, cache
 
-    def get_min_max_bounds(self, bin, argsorted_xs, argsorted_ys, bounds):
-        xs_min_idx = self.binary_search_min_bound(bin, argsorted_xs, bounds[0], for_x=True)
-        xs_max_idx = self.binary_search_max_bound(bin, argsorted_xs, bounds[1], for_x=True)
-
-        ys_min_idx = self.binary_search_min_bound(bin, argsorted_ys, bounds[2], for_x=False)
-        ys_max_idx = self.binary_search_max_bound(bin, argsorted_ys, bounds[3], for_x=False)
-        return xs_min_idx, xs_max_idx, ys_min_idx, ys_max_idx
+    #@profile
+    def get_min_max_bounds(self, bin, argsorted_xs, argsorted_ys, bounds, cache):
+        xs_min_idx, cache = self.binary_search_min_bound(bin, argsorted_xs, bounds[0], cache=cache, for_x=True)
+        xs_max_idx, cache = self.binary_search_max_bound(bin, argsorted_xs, bounds[1], cache=cache, for_x=True)
+        ys_min_idx, cache = self.binary_search_min_bound(bin, argsorted_ys, bounds[2], cache=cache, for_x=False)
+        ys_max_idx, cache = self.binary_search_max_bound(bin, argsorted_ys, bounds[3], cache=cache, for_x=False)
+        return cache, (xs_min_idx, xs_max_idx, ys_min_idx, ys_max_idx)
     
-    def create_linesegments(self, bin, in_bounds_idxs, type, coord_count):
+    #@profile
+    def create_linesegments(self, bin, in_bounds_idxs, type, coord_count, cache):
         coords_linestrings = set()
         for idx in in_bounds_idxs:
-            coord1, _, (ring_beg_idx, ring_end_idx, _, _)  = self.access_vertex(bin, idx,  getBoundsData=True)
+
+            coord1, cache, (ring_beg_idx, ring_end_idx, _, _)  = self.access_vertex(bin, idx, cache, getBoundsData=True)
             if type == GT.LINESTRING:
                 if idx != coord_count - 1:  
-                    coords_linestrings.add(shapely.LineString([coord1, self.access_vertex(bin, idx + 1)[0]]))
+                    coord, cache, _ = self.access_vertex(bin, idx + 1, cache)
+                    coords_linestrings.add(shapely.LineString([coord1, coord]))
                 if idx != 0:
-                    coords_linestrings.add(shapely.LineString([self.access_vertex(bin, idx - 1)[0], coord1]))
+                    coord, cache, _ = self.access_vertex(bin, idx - 1, cache)
+                    coords_linestrings.add(shapely.LineString([coord, coord1]))
               
             elif type != GT.LINESTRING:
                 if idx == ring_beg_idx:
-                     coords_linestrings.add(shapely.LineString([self.access_vertex(bin, ring_end_idx)[0], coord1]))
+                     coord, cache, _ = self.access_vertex(bin, ring_end_idx, cache)
+                     coords_linestrings.add(shapely.LineString([coord, coord1]))
                 elif idx ==  ring_end_idx:
-                    coords_linestrings.add(shapely.LineString([coord1, self.access_vertex(bin, ring_beg_idx)[0]]))
+                    coord, cache, _ = self.access_vertex(bin, ring_beg_idx, cache)
+                    coords_linestrings.add(shapely.LineString([coord1, coord]))
                 else:
-                    coords_linestrings.add(shapely.LineString([coord1, self.access_vertex(bin, idx + 1)[0]]))
-                    coords_linestrings.add(shapely.LineString([coord1, self.access_vertex(bin, idx - 1)[0]]))
+                    coord, cache, _ = self.access_vertex(bin, idx + 1, cache)
+                    coords_linestrings.add(shapely.LineString([coord1, coord]))
+                    coord, cache, _ = self.access_vertex(bin, idx - 1, cache)
+                    coords_linestrings.add(shapely.LineString([coord1, coord]))
 
-        return coords_linestrings
+        return coords_linestrings, cache
 
  # ------------------------------------------------
+    #@profile
     def is_intersecting(self, args):
         l_bin_in, r_bin_in = args
         s = time.perf_counter()
-        l_bounds = list(struct.unpack_from('!dddd', l_bin_in, offset=2)) # Skip first part of header
-        r_bounds = list(struct.unpack_from('!dddd', r_bin_in, offset=2)) # Skip first part of header
 
-
-        bound_xmin, bound_xmax = self.get_bounds_intersect(l_bounds[0], r_bounds[0], l_bounds[2], r_bounds[2])
-        bound_ymin, bound_ymax = self.get_bounds_intersect(l_bounds[1], r_bounds[1], l_bounds[3], r_bounds[3])
-        bounds = (bound_xmin, bound_xmax, bound_ymin, bound_ymax)
-    
-        if bound_xmin == None or bound_ymin == None:
-            t = time.perf_counter()
-            return t - s, False
-
+        #Convert the binaries to bitarrays
         l_bin = bitarray(endian='big')
         r_bin = bitarray(endian='big')
 
         l_bin.frombytes(l_bin_in)
         r_bin.frombytes(r_bin_in)
-        self.offset = 0
-        _, l_type, (l_argsorted_x, l_argsorted_y), l_coord_count = self.decode_header(l_bin, True)
-        self.offset = 0
-        _, r_type, (r_argsorted_x, r_argsorted_y), r_coord_count = self.decode_header(r_bin, True)
         
+        #Create caches for random accesing for the two binaries
+        l_cache, r_cache = {}, {}
 
-        l_x_min_idx, l_x_max_idx, l_y_min_idx, l_y_max_idx = self.get_min_max_bounds(l_bin, l_argsorted_x, l_argsorted_y, bounds)
-        r_x_min_idx, r_x_max_idx, r_y_min_idx, r_y_max_idx = self.get_min_max_bounds(r_bin, r_argsorted_x, r_argsorted_y, bounds)
+        #Retrieve the bounding boxes from the binaries
+        l_bounds = list(struct.unpack_from('!dddd', l_bin_in, offset=2)) # Skip first part of header
+        r_bounds = list(struct.unpack_from('!dddd', r_bin_in, offset=2)) # Skip first part of header
+
+        #Calculate the intersecting bounding box 
+        bound_xmin, bound_xmax = self.get_bounds_intersect(l_bounds[0], r_bounds[0], l_bounds[2], r_bounds[2])
+        bound_ymin, bound_ymax = self.get_bounds_intersect(l_bounds[1], r_bounds[1], l_bounds[3], r_bounds[3])
+        bounds = (bound_xmin, bound_xmax, bound_ymin, bound_ymax)
+    
+        #If bounding boxes do not overleap, intersection can not occur
+        if bound_xmin == None or bound_ymin == None:
+            t = time.perf_counter()
+            return t - s, False
+
+        #Decode headers of binaries and save offset to be able to skip decode headers again
+        self.offset = 0
+        l_delta_size, l_type, (l_argsorted_x, l_argsorted_y), l_coord_count = self.decode_header(l_bin, True)
+        l_cache['offset'] = self.offset
+        l_cache['header'] = (l_delta_size, l_type)
+
+        self.offset = 0
+        r_delta_size, r_type, (r_argsorted_x, r_argsorted_y), r_coord_count = self.decode_header(r_bin, True)
+        r_cache['offset'] = self.offset
+        r_cache['header'] = (r_delta_size, r_type)
+
+        
+        #Find indicies in sorted list which are inside intersecting bounding box
+        l_cache, (l_x_min_idx, l_x_max_idx, l_y_min_idx, l_y_max_idx) = self.get_min_max_bounds(l_bin, l_argsorted_x, l_argsorted_y, bounds, l_cache)
+        r_cache, (r_x_min_idx, r_x_max_idx, r_y_min_idx, r_y_max_idx) = self.get_min_max_bounds(r_bin, r_argsorted_x, r_argsorted_y, bounds, r_cache)
     
         in_bounds_idxs1 = set(l_argsorted_x[l_x_min_idx:l_x_max_idx + 1]).intersection(set(l_argsorted_y[l_y_min_idx:l_y_max_idx + 1]))
         in_bounds_idxs2 = set(r_argsorted_x[r_x_min_idx:r_x_max_idx + 1]).intersection(set(r_argsorted_y[r_y_min_idx:r_y_max_idx + 1]))
-    
-        coords1_linestrings = self.create_linesegments(l_bin, in_bounds_idxs1, l_type, l_coord_count)  
-        coords2_linestrings = self.create_linesegments(r_bin, in_bounds_idxs2, r_type, r_coord_count)  
+
+        #Create linesegments to check pairwise intersection on
+        coords1_linestrings, l_cache = self.create_linesegments(l_bin, in_bounds_idxs1, l_type, l_coord_count, l_cache)  
+        coords2_linestrings, r_cache = self.create_linesegments(r_bin, in_bounds_idxs2, r_type, r_coord_count, r_cache)  
 
         for i in coords1_linestrings:
             for j in coords2_linestrings:
@@ -742,13 +791,23 @@ class FpdExtended(CompressionAlgorithm):
         
         t = time.perf_counter()
         return t - s, False
-           
+
+    def is_intersecting2(self, args):
+        l_bin, r_bin = args
+        s = time.perf_counter()
+        l_bounds = list(struct.unpack_from('!dddd', l_bin, offset=2)) # Skip first part of header
+        r_bounds = list(struct.unpack_from('!dddd', r_bin, offset=2)) # Skip first part of header
+        if (self.get_bounds_intersect(l_bounds[0], r_bounds[0], l_bounds[2], r_bounds[2]) == (None, None) 
+            or self.get_bounds_intersect(l_bounds[1], r_bounds[1], l_bounds[3], r_bounds[3]) == (None, None)):
+            t = time.perf_counter()
+            return t - s, False
+        
         _, l_geo = self.decompress(l_bin)
         _, r_geo = self.decompress(r_bin)
         res = shapely.intersects(l_geo, r_geo)
         t = time.perf_counter()
         return t - s, res
-
+    #@profile
     def intersection(self, args):
         l_bin, r_bin = args
         s = time.perf_counter()
@@ -796,6 +855,8 @@ def main():
 
     #print(x.access_vertex(bin4, 6, getBoundsData=True))
     print(x.is_intersecting((bin3, bin4)))
+    print("prev:",x.is_intersecting2((bin3, bin4)))
+
 
     #print(x.intersection((bin3, bin4)))
     #t, bin3 = x.add_vertex((bin3, 2, [0.2, 0.2]))
@@ -885,4 +946,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
