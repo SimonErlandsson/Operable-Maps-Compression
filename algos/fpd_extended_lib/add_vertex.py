@@ -1,11 +1,3 @@
-
-# Run main locally
-import sys
-from pathlib import Path  # if you haven't already done so
-file = Path(__file__).resolve()
-parent, root = file.parent, file.parents[1]
-sys.path.append(str(root))
-
 import time
 from shapely import GeometryType as GT
 import bisect

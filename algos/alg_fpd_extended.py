@@ -6,9 +6,9 @@ parent, root = file.parent, file.parents[1]
 sys.path.append(str(root))
 
 from algos.base import CompressionAlgorithm
-from algos.fpd_extended_lib.intersection import Intersection
-from algos.fpd_extended_lib.addVertex import AddVertex
-from algos.fpd_extended_lib.functions import Funcs
+from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import *
+from algos.fpd_extended_lib.add_vertex import AddVertex
+from algos.fpd_extended_lib.functions import *
 
 
 from collections import deque
@@ -104,27 +104,6 @@ class FpdExtended(CompressionAlgorithm):
                 ring_count.append(poly_ring_count)
         return ring_count
 
-    def get_non_looping_coords(self, geometry):
-        coords = shapely.get_coordinates(geometry)
-
-        if shapely.get_type_id(geometry) == GT.LINESTRING:
-            return shapely.get_coordinates(geometry)
-
-        coords = []
-        if shapely.get_type_id(geometry) == GT.POLYGON:
-            interiors = geometry.interiors
-            coords.extend(geometry.exterior.coords[:-1])
-            for ring in interiors:
-                coords.extend(ring.coords[:-1])
-            return coords
-
-        elif shapely.get_type_id(geometry) == GT.MULTIPOLYGON:
-            for polygon in list(geometry.geoms):
-                interiors = polygon.interiors
-                coords.extend(polygon.exterior.coords[:-1])
-                for ring in interiors:
-                    coords.extend(ring.coords[:-1])
-            return coords
 
     def append_header(self, bits, geometry, d_size):
         # Meta data
@@ -137,13 +116,15 @@ class FpdExtended(CompressionAlgorithm):
         bits.frombytes(self.double_to_bytes(bounds[2]))
         bits.frombytes(self.double_to_bytes(bounds[3]))
 
-        coords = self.get_non_looping_coords(geometry)
-        bits.extend(self.uint_to_ba(int(len(coords)), 4 * 8))  # size of integer
-        sorted_idxs = [np.argsort([coord[0] for coord in coords]), np.argsort([coord[1] for coord in coords])]
-        idx_bits = math.ceil(math.log2(len(coords)))
-        for i in range(2):
-            for idx in range(len(coords)):
-                bits.extend(self.uint_to_ba(int(sorted_idxs[i][idx]), idx_bits))
+        append_intersection_header(self, bits, geometry)
+
+        # coords = self.get_non_looping_coords(geometry)
+        # bits.extend(self.uint_to_ba(int(len(coords)), 4 * 8))  # size of integer
+        # sorted_idxs = [np.argsort([coord[0] for coord in coords]), np.argsort([coord[1] for coord in coords])]
+        # idx_bits = math.ceil(math.log2(len(coords)))
+        # for i in range(2):
+        #     for idx in range(len(coords)):
+        #         bits.extend(self.uint_to_ba(int(sorted_idxs[i][idx]), idx_bits))
 
     def decode_header(self, bin, get_idxs=False):
         delta_size, type = struct.unpack_from('!BB', bin)
@@ -151,16 +132,16 @@ class FpdExtended(CompressionAlgorithm):
         self.offset += 2 * 8 + 4 * 64  # Offset is 2 bytes for BB + 64 * 4 for bounding box
 
         # Code segment needed for extracting sorted indexes
-        coord_count = self.bytes_to_uint(bin, 4 * 8)
-        idx_sizes = math.ceil(math.log2(coord_count))
-        sorted_idxs = [[], []]
-        if get_idxs:
-            for i in range(2):
-                for _ in range(coord_count):
-                    sorted_idxs[i].append(self.bytes_to_uint(bin, idx_sizes))
-            return delta_size, type, sorted_idxs, coord_count
-        else:
-            self.offset += idx_sizes * 2 * coord_count
+        # coord_count = self.bytes_to_uint(bin, 4 * 8)
+        # idx_sizes = math.ceil(math.log2(coord_count))
+        # sorted_idxs = [[], []]
+        # if get_idxs:
+        #     for i in range(2):
+        #         for _ in range(coord_count):
+        #             sorted_idxs[i].append(self.bytes_to_uint(bin, idx_sizes))
+        #     return delta_size, type, sorted_idxs, coord_count
+        # else:
+        #     self.offset += idx_sizes * 2 * coord_count
         return delta_size, type
 
     def append_delta_pair(self, bits, d_x_zig, d_y_zig, d_size):
@@ -371,6 +352,10 @@ class FpdExtended(CompressionAlgorithm):
         geometry = self.fp_delta_decoding(bin)
         t = time.perf_counter()
         return t - s, geometry
+    
+
+    # Export helper functions
+    get_chunks = get_chunks
 
 
 # ---- UNARY ---- #

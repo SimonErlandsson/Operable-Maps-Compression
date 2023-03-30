@@ -1,11 +1,3 @@
-# Run main locally
-import sys
-from pathlib import Path  # if you haven't already done so
-file = Path(__file__).resolve()
-parent, root = file.parent, file.parents[1]
-sys.path.append(str(root))
-
-from algos.base import CompressionAlgorithm
 from algos.fpd_extended_lib.functions import Funcs
 from collections import deque
 import shapely
@@ -15,7 +7,6 @@ import struct
 import math
 import numpy as np
 from shapely import GeometryType as GT
-import bisect
 from bitarray import bitarray, util, bits2bytes
 
 
@@ -178,3 +169,62 @@ class Intersection:
         t = time.perf_counter()
 
         return t - s, res
+    
+    def get_non_looping_coords(self, geometry):
+        coords = shapely.get_coordinates(geometry)
+
+        if shapely.get_type_id(geometry) == GT.LINESTRING:
+            return shapely.get_coordinates(geometry)
+
+        coords = []
+        if shapely.get_type_id(geometry) == GT.POLYGON:
+            interiors = geometry.interiors
+            coords.extend(geometry.exterior.coords[:-1])
+            for ring in interiors:
+                coords.extend(ring.coords[:-1])
+            return coords
+
+        elif shapely.get_type_id(geometry) == GT.MULTIPOLYGON:
+            for polygon in list(geometry.geoms):
+                interiors = polygon.interiors
+                coords.extend(polygon.exterior.coords[:-1])
+                for ring in interiors:
+                    coords.extend(ring.coords[:-1])
+            return coords
+        
+    def append_header(self, bits, geometry, d_size):
+        # Meta data
+        bits.frombytes(self.uchar_to_bytes(d_size))
+        bits.frombytes(self.uchar_to_bytes(int(shapely.get_type_id(geometry))))  # 1 byte is enough for storing type
+        # Bounding Box
+        bounds = shapely.bounds(geometry)
+        bits.frombytes(self.double_to_bytes(bounds[0]))
+        bits.frombytes(self.double_to_bytes(bounds[1]))
+        bits.frombytes(self.double_to_bytes(bounds[2]))
+        bits.frombytes(self.double_to_bytes(bounds[3]))
+
+        coords = self.get_non_looping_coords(geometry)
+        bits.extend(self.uint_to_ba(int(len(coords)), 4 * 8))  # size of integer
+        sorted_idxs = [np.argsort([coord[0] for coord in coords]), np.argsort([coord[1] for coord in coords])]
+        idx_bits = math.ceil(math.log2(len(coords)))
+        for i in range(2):
+            for idx in range(len(coords)):
+                bits.extend(self.uint_to_ba(int(sorted_idxs[i][idx]), idx_bits))
+
+    def decode_header(self, bin, get_idxs=False):
+        delta_size, type = struct.unpack_from('!BB', bin)
+        type = GT(type)
+        self.offset += 2 * 8 + 4 * 64  # Offset is 2 bytes for BB + 64 * 4 for bounding box
+
+        # Code segment needed for extracting sorted indexes
+        coord_count = self.bytes_to_uint(bin, 4 * 8)
+        idx_sizes = math.ceil(math.log2(coord_count))
+        sorted_idxs = [[], []]
+        if get_idxs:
+            for i in range(2):
+                for _ in range(coord_count):
+                    sorted_idxs[i].append(self.bytes_to_uint(bin, idx_sizes))
+            return delta_size, type, sorted_idxs, coord_count
+        else:
+            self.offset += idx_sizes * 2 * coord_count
+        return delta_size, type

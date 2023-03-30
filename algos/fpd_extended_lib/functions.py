@@ -1,14 +1,4 @@
-# Run main locally
-import sys
-from pathlib import Path  # if you haven't already done so
-file = Path(__file__).resolve()
-parent, root = file.parent, file.parents[1]
-sys.path.append(str(root))
-
-
 from collections import deque
-import shapely
-import shapely.wkt
 import time
 import struct
 import math
@@ -16,6 +6,49 @@ import numpy as np
 from shapely import GeometryType as GT
 import bisect
 from bitarray import bitarray, util, bits2bytes
+
+def get_chunks(self, bin_in):
+    chunks = []
+    self.offset = 0
+    bin = bitarray(endian='big')
+    bin.frombytes(bin_in)
+
+    delta_size, type = self.decode_header(bin)
+    # Type specific variables
+    is_linestring = type == GT.LINESTRING
+    is_multipolygon = type == GT.MULTIPOLYGON
+
+    chunks_in_ring_left = 0  # Used for iteration
+    chunks_in_ring = 0
+    rings_left = 0
+    bin_len = len(bin)
+    while (self.offset + self.EOF_THRESHOLD <= bin_len):
+        if is_multipolygon and rings_left == 0:
+            rings_left = self.bytes_to_uint(bin, self.POLY_RING_CNT_SIZE)
+        if not is_linestring and chunks_in_ring_left == 0:
+            chunks_in_ring_left = self.bytes_to_uint(bin, self.RING_CHK_CNT_SIZE)
+            chunks_in_ring = chunks_in_ring_left
+
+        # Go through chunk (inlined sequence decode)
+        deltas_in_chunk = self.bytes_to_uint(bin, self.D_CNT_SIZE)
+        # Extract reset point
+        x = self.bytes_to_double(bin)
+        y = self.bytes_to_double(bin)
+        #if chunks_in_ring_left == chunks_in_ring:
+            #x_ring, y_ring = (x, y)
+        
+        chunk = [[x, y]]
+        # Loop through deltas in chunk
+        for _ in range(deltas_in_chunk):
+            x = self.bytes_to_decoded_coord(bin, x, delta_size)
+            y = self.bytes_to_decoded_coord(bin, y, delta_size)
+            chunk.append([x, y])
+        chunks.append(chunk)
+        chunks_in_ring_left -= 1
+        if chunks_in_ring_left == 0:
+            #chunks.append([x_ring, y_ring])
+            rings_left -= 1
+    return chunks
 
 class Funcs:
     ALG = None

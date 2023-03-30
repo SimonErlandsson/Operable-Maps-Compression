@@ -44,3 +44,36 @@ def plot_coordinates(geom, SHOW_COORDINATES=True):
 def plot_intersecting_points(ps, SHOW_INTERSECTING_POINTS=True):
     if SHOW_INTERSECTING_POINTS:
         plt.scatter(xs(ps), ys(ps), zorder=10)
+
+# FPDE related stuff
+from algos.alg_fpd_extended import FpdExtended
+from bitarray import bitarray
+from shapely import GeometryType as GT
+fpd = FpdExtended()
+
+
+def plot_chunk_bounds(bin_in, include_next_chunk_start=False):
+    fig = plt.figure()
+    zoom = 2.5
+    w, h = fig.get_size_inches()
+    fig.set_size_inches(w * zoom, h * zoom)
+
+    chunks = fpd.get_chunks(bin_in)
+    for idx, chunk in enumerate(chunks):
+        xs, ys = [coord[0] for coord in chunk], [coord[1] for coord in chunk]
+        if include_next_chunk_start:
+            xs.append(chunks[(idx + 1) % len(chunks)][0][0])
+            ys.append(chunks[(idx + 1) % len(chunks)][0][1])
+        x_bounds = [min(xs), max(xs), max(xs), min(xs), min(xs)]
+        y_bounds = [max(ys), max(ys), min(ys), min(ys), max(ys)]
+        chunk_color = (np.random.random(), np.random.random(), np.random.random())
+        inverse_chunk_color = (1 - chunk_color[0], 1 - chunk_color[1], 1 - chunk_color[2])
+        plt.plot(x_bounds, y_bounds, color=chunk_color)
+        plt.fill(x_bounds, y_bounds, color=chunk_color, alpha=0.05)
+        plt.scatter(xs, ys, s=10, color=inverse_chunk_color)
+    
+    _, vertices = fpd.vertices(bin_in) # Avoid problem with ring not connecting in end 
+    all_x, all_y = [coord[0] for coord in vertices], [coord[1] for coord in vertices]
+    plt.plot(all_x, all_y, zorder=-1)
+    plt.title("Chunk Bounds" if not include_next_chunk_start else "Chunk Bounds - With Connecting Borders")
+    plt.show()

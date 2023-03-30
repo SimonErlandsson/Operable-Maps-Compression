@@ -11,6 +11,8 @@ def common_bbox(bins): # Returns lower left corner, upper right corner in 1D arr
     x_l, y_b, x_r, y_t = bbox
     return bbox if x_r >= x_l and y_t >= y_b else None
 
+def get_chunk_bounds(bin):
+    pass
 
 def is_intersecting(bins):
     bbox = common_bbox(bins)
