@@ -7,6 +7,7 @@ from shapely import GeometryType as GT
 import bisect
 from bitarray import bitarray, util, bits2bytes
 
+
 def get_chunks(self, bin_in):
     chunks = []
     self.offset = 0
@@ -34,9 +35,10 @@ def get_chunks(self, bin_in):
         # Extract reset point
         x = self.bytes_to_double(bin)
         y = self.bytes_to_double(bin)
-        #if chunks_in_ring_left == chunks_in_ring:
-            #x_ring, y_ring = (x, y)
-        
+        print(x, y)
+        # if chunks_in_ring_left == chunks_in_ring:
+        # x_ring, y_ring = (x, y)
+
         chunk = [[x, y]]
         # Loop through deltas in chunk
         for _ in range(deltas_in_chunk):
@@ -46,12 +48,14 @@ def get_chunks(self, bin_in):
         chunks.append(chunk)
         chunks_in_ring_left -= 1
         if chunks_in_ring_left == 0:
-            #chunks.append([x_ring, y_ring])
+            # chunks.append([x_ring, y_ring])
             rings_left -= 1
     return chunks
 
+
 class Funcs:
     ALG = None
+
     def __init__(self, ALG) -> None:
         self.ALG = ALG
 
@@ -140,7 +144,7 @@ class Funcs:
                     cache[idx + offset_idx] = (x, y)
         self.ALG.offset = old_offset
         return (x, y), cache
-    
+
     def type(self, bin):
         s = time.perf_counter()
         type = struct.unpack_from('!B', bin, offset=1)[0]  # 1 Byte offset
@@ -155,14 +159,13 @@ class Funcs:
 
     def bounding_box(self, bin):
         s = time.perf_counter()
-        
+
         bounds = []
         res = bitarray()
         res.frombytes(bin)
-        bounds = [self.ALG.bin2float(res[2 * 8 +  self.ALG.FLOAT_SIZE * i: 2 * 8 + self.ALG.FLOAT_SIZE * (i + 1)]) for i in range(4)]
+        bounds = list(struct.unpack_from('!dddd', bin, offset=2))  # Skip first part of header
         t = time.perf_counter()
         return t - s, bounds
-    
 
     def vertices(self, bin_in):
         s = time.perf_counter()
@@ -210,4 +213,3 @@ class Funcs:
 
         t = time.perf_counter()
         return t - s, coords
-    

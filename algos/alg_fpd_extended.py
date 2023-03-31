@@ -10,6 +10,7 @@ from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import *
 from algos.fpd_extended_lib.add_vertex import AddVertex
 from algos.fpd_extended_lib.functions import *
 
+
 from collections import deque
 import shapely
 import shapely.wkt
@@ -20,7 +21,6 @@ import numpy as np
 from shapely import GeometryType as GT
 import bisect
 from bitarray import bitarray, util, bits2bytes
-
 
 #####                 #####
 # --- FP-DELTA BASELINE ---#
@@ -34,79 +34,23 @@ from bitarray import bitarray, util, bits2bytes
 
 
 class FpdExtended(CompressionAlgorithm):
-    FLOAT_SIZE = 64
     D_CNT_SIZE = 16
     POLY_RING_CNT_SIZE = 16
     RING_CHK_CNT_SIZE = 16
     MAX_NUM_DELTAS = 15  # Max number of deltas in a chunk before split
-    EOF_THRESHOLD = D_CNT_SIZE + FLOAT_SIZE * 2  # Number of bits required to continue parsing
+    EOF_THRESHOLD = D_CNT_SIZE + 64 * 2  # Number of bits required to continue parsing
 
     offset = 0  # Used when parsing
 # ---- HELPER METHODS
 
-    def float2bin(self, float):
-        decimal_part, integral_part = math.modf(float)
-        sign = 0 if float > 0 else 1
-        decimal_part = decimal_part * (1 - sign * 2)
-        integral_part = int(integral_part) * (1 - sign * 2)
-
-        integral_bin = bitarray()
-        while(integral_part >= 1):
-            integral_bin.append(integral_part % 2)
-            integral_part = integral_part >> 1
-        integral_bin.reverse()
-
-        decimal_bin = bitarray()
-        while(decimal_part != 0):
-            decimal_part *= 2
-            decimal_bin.append(0 if decimal_part < 1 else 1)
-            if decimal_part >= 1:
-                decimal_part -= 1
-        
-        exponent = 127 + len(integral_bin) - 1
-        res = bitarray()
-        res.append(sign)
-        res.extend(self.uint_to_ba(exponent,8))
-        integral_bin.extend(decimal_bin)
-        while len(integral_bin) < self.FLOAT_SIZE - 9 + 1:
-            integral_bin.append(0)
-
-        res.extend(integral_bin[1:self.FLOAT_SIZE - 9 + 1])
-        return res
-
-
-    def bin2float(self, precision_float):
-        sign = (1 + (-2 * precision_float[0]))
-        exponent = util.ba2int(precision_float[1:9], signed=False) - 127
-        decimal_part = precision_float[9:]
-        decimal = 1
-        for i in range(1,self.FLOAT_SIZE - 9 + 1):
-            decimal += decimal_part[i - 1] * math.pow(2, -i)
-        return round(decimal * sign * math.pow(2,exponent),7)
-    
-    
-    def bits2Long(self, bits):
-        res = 0
-        for ele in bits:
-            res = (res << 1) | ele
-        return res
-    
-    def long2bits(self, num):      
-        binary = bin(num)[2:]
-        res =  bitarray()
-        res.extend('0' * (self.FLOAT_SIZE - len(binary)))
-        res.extend(binary)
-        return res
-
-   
     def double_as_long(self, num):
-        return self.bits2Long(self.float2bin(num))
+        return struct.unpack('!q', struct.pack('!d', num))[0]
 
     def long_as_double(self, num):
-        return self.bin2float(self.long2bits(num))
-    
+        return struct.unpack('!d', struct.pack('!q', num))[0]
+
     def double_to_bytes(self, x):
-        return self.float2bin(x)
+        return struct.pack("!d", x)
 
     # Inline refactorized from https://github.com/ilanschnell/bitarray/blob/master/bitarray/util.py
 
@@ -172,11 +116,31 @@ class FpdExtended(CompressionAlgorithm):
         bits.frombytes(self.double_to_bytes(bounds[3]))
 
         append_intersection_header(self, bits, geometry)
-   
+
+        # coords = self.get_non_looping_coords(geometry)
+        # bits.extend(self.uint_to_ba(int(len(coords)), 4 * 8))  # size of integer
+        # sorted_idxs = [np.argsort([coord[0] for coord in coords]), np.argsort([coord[1] for coord in coords])]
+        # idx_bits = math.ceil(math.log2(len(coords)))
+        # for i in range(2):
+        #     for idx in range(len(coords)):
+        #         bits.extend(self.uint_to_ba(int(sorted_idxs[i][idx]), idx_bits))
+
     def decode_header(self, bin, get_idxs=False):
         delta_size, type = struct.unpack_from('!BB', bin)
         type = GT(type)
-        self.offset += 2 * 8 + 4 * self.FLOAT_SIZE  # Offset is 2 bytes for BB + 64 * 4 for bounding box
+        self.offset += 2 * 8 + 4 * 64  # Offset is 2 bytes for BB + 64 * 4 for bounding box
+
+        # Code segment needed for extracting sorted indexes
+        # coord_count = self.bytes_to_uint(bin, 4 * 8)
+        # idx_sizes = math.ceil(math.log2(coord_count))
+        # sorted_idxs = [[], []]
+        # if get_idxs:
+        #     for i in range(2):
+        #         for _ in range(coord_count):
+        #             sorted_idxs[i].append(self.bytes_to_uint(bin, idx_sizes))
+        #     return delta_size, type, sorted_idxs, coord_count
+        # else:
+        #     self.offset += idx_sizes * 2 * coord_count
         return delta_size, type
 
     def append_delta_pair(self, bits, d_x_zig, d_y_zig, d_size):
@@ -268,18 +232,18 @@ class FpdExtended(CompressionAlgorithm):
         # print([int.from_bytes(i, 'big') for i in bytes], '\n')
         return bits.tobytes()
 
-    def bytes_to_decoded_coord(self, bin, prev_coord, inputsize=32):
-        bin = bin[self.offset: self.offset + inputsize]
+    def bytes_to_decoded_coord(self, bin, prev_coord, input_size=64):
+        bin = bin[self.offset: self.offset + input_size]
         val = util.ba2int(bin, signed=False)
         val = self.zz_decode(val) + self.double_as_long(prev_coord)
         val = self.long_as_double(val)
-        self.offset += inputsize
+        self.offset += input_size
         return val
 
-    def bytes_to_double(self, bin, offset = None):
-        bin = bin[self.offset:self.offset + self.FLOAT_SIZE]
-        val = self.bin2float(bin)
-        self.offset += self.FLOAT_SIZE
+    def bytes_to_double(self, bin):
+        bin = bin[self.offset:self.offset + 64]
+        val = struct.unpack('!d', bin)[0]
+        self.offset += 8 * 8
         return val
 
     def bytes_to_uint(self, bin, len):
@@ -297,8 +261,7 @@ class FpdExtended(CompressionAlgorithm):
         for _ in range(chk_size):
             x = self.bytes_to_decoded_coord(bin, x, delta_size)
             y = self.bytes_to_decoded_coord(bin, y, delta_size)
-
-            seq_list.append((float("{:.7f}".format(x)), float("{:.7f}".format(y))))
+            seq_list.append((x, y))
 
     def ring_decoder(self, bin, polygon_list, delta_size):
         # Extract number of chunks for a ring
@@ -322,6 +285,7 @@ class FpdExtended(CompressionAlgorithm):
         self.offset = 0
         bin = bitarray(endian='big')
         bin.frombytes(bin_in)
+
         delta_size, type = self.decode_header(bin)
 
         binary_length = len(bin)
@@ -334,7 +298,6 @@ class FpdExtended(CompressionAlgorithm):
         elif type == GT.POLYGON:
             while (self.offset + self.EOF_THRESHOLD <= binary_length):  # While != EOF, i.e. at least one byte left
                 self.ring_decoder(bin, coords, delta_size)
-                
             geometry = shapely.Polygon(shell=coords[0], holes=coords[1:])
 
         elif type == GT.MULTIPOLYGON:
@@ -345,7 +308,7 @@ class FpdExtended(CompressionAlgorithm):
 
     def calculate_delta_size(self, geometry, return_deltas=False):
         deltas = [[], []]
-        RESET_POINT_SIZE = self.FLOAT_SIZE * 2 + self.D_CNT_SIZE
+        RESET_POINT_SIZE = 64 * 2 + self.D_CNT_SIZE
         coords = shapely.get_coordinates(geometry)
         prev = [0, 0]
         bit_cnts = {}
@@ -391,7 +354,10 @@ class FpdExtended(CompressionAlgorithm):
 
     # Export helper functions
     get_chunks = get_chunks
+
+
 # ---- UNARY ---- #
+
 
     def vertices(self, bin):
         return Funcs(self).vertices(bin)
@@ -405,7 +371,7 @@ class FpdExtended(CompressionAlgorithm):
     # TODO: Handle bounding box
     def add_vertex(self, args):
         return AddVertex(self).add_vertex(args)
- 
+
 # ---- BINARY ---- #
 
     def is_intersecting(self, args):
@@ -423,15 +389,28 @@ def main():
     from shapely.geometry import shape
     from alg_fpd import Fpd
     x = FpdExtended()
+
     geom1 = shapely.wkt.loads('POLYGON ((-24.3 10.48, -19.32 12.44, -15.3 14.2, -15.3 13.78, -15.3 13.9, -15.06 10.4, -17.44 11.38, -19.18 11.46, -14.82 9.08, -12.9 10.14, -12.08 7.86, -14.36 5.94, -15.92 8.34, -16.86 3.48, -19.38 4.4, -18.2 6.52, -20.08 7.4, -24.34 6.68, -24.24 8.66, -27.52 11.1,  -27.0 11.1, -24.3 10.48))')
+    geom2 = shapely.wkt.loads('POLYGON ((-9.9 16.85, -5.95 17.67, -6.19 13.49, -9.81 12.74, -7.35 9.2, -6.82 6.19, -10 6, -12.36 5.75, -14.59 8.1, -12 10, -13.93 12.31, -17.35 12.45, -16.83 15.6, -20.45 14.6, -22.36 12, -22 9.37, -27.1 6.48, -30 11.7, -27.9 15.5, -21.46 17.26, -19.6 16.1, -14.77 17.6, -11.43 13.32, -9.9 16.85))')
 
+    geom3 = shapely.wkt.loads("MULTIPOLYGON (((13.193709 55.7021381, 13.1937743 55.7021279, 13.1938355 55.7021184, 13.1938461 55.702109, 13.1938566 55.7020984, 13.1938611 55.7020902, 13.1938655 55.7020774, 13.1938655 55.7020633, 13.1938583 55.7020408, 13.1938402 55.7020014, 13.1937184 55.7017259, 13.1937008 55.7016876, 13.1936836 55.7016654, 13.1936537 55.7016428, 13.1936223 55.7016242, 13.1935741 55.7016036, 13.1935354 55.7015911, 13.1935006 55.701584, 13.1934829 55.701598, 13.1934673 55.7016115, 13.1934736 55.7016164, 13.1934776 55.7016216, 13.1934875 55.7016633, 13.1934985 55.7016898, 13.1935196 55.7017337, 13.1935659 55.7018353, 13.1936162 55.7018282, 13.1936551 55.7019155, 13.1936651 55.7019377, 13.1936955 55.7020047, 13.1936497 55.7020119, 13.193709 55.7021381)), ((13.1938175 55.7017126, 13.1938602 55.7017068, 13.1939048 55.7017007, 13.1938998 55.7016861, 13.193892 55.7016685, 13.1938831 55.7016589, 13.193871 55.701651, 13.1938602 55.701646, 13.1938405 55.7016438, 13.193822 55.7016456, 13.1938062 55.7016517, 13.1937985 55.7016571, 13.1937953 55.7016646, 13.1937979 55.7016746, 13.1938017 55.7016836, 13.1938052 55.7016908, 13.1938175 55.7017126)), ((13.1940245 55.7019788, 13.19398 55.7019848, 13.1939372 55.7019907, 13.1939585 55.7020383, 13.1939692 55.7020479, 13.1939841 55.7020512, 13.1939975 55.7020519, 13.1940079 55.702051, 13.1940198 55.7020497, 13.1940317 55.7020463, 13.1940395 55.7020422, 13.1940435 55.7020369, 13.1940452 55.7020314, 13.1940457 55.7020218, 13.1940245 55.7019788)), ((13.1939779 55.7015541, 13.1939529 55.701555, 13.1939622 55.7015658, 13.1939755 55.7015942, 13.194075 55.7018201, 13.1941382 55.7019637, 13.1941483 55.7019866, 13.194164 55.7020087, 13.1941899 55.7020304, 13.1942142 55.7020424, 13.1942291 55.7020486, 13.1942638 55.702042, 13.195019 55.7018988, 13.1948681 55.7018923, 13.1944181 55.7018687, 13.1944172 55.7018717, 13.194395 55.7018706, 13.1942164 55.7018622, 13.194172 55.7017564, 13.1941218 55.701761, 13.1941279 55.7017262, 13.1941357 55.7016818, 13.1940872 55.7015737, 13.1940769 55.7015503, 13.1939779 55.7015541), (13.1942341 55.7020059, 13.1942075 55.7020095, 13.1941895 55.7019673, 13.1941696 55.701921, 13.1941936 55.7019177, 13.1941884 55.7019055, 13.19426 55.7018958, 13.1942645 55.7019063, 13.1943172 55.7018991, 13.1943567 55.7019912, 13.1943041 55.7019984, 13.1943086 55.7020089, 13.1942394 55.7020183, 13.1942341 55.7020059)))")
 
-    t, bin = x.compress(geom1)
-    t, geomx = x.decompress(bin)
-    print(x.bounding_box(bin))
-    
+    geom4 = shapely.wkt.loads(
+        "LINESTRING (13.199378 55.7034667, 13.1999441 55.7033986, 13.200125 55.7033882, 13.2002723 55.7033936, 13.2004383 55.7034097, 13.2005935 55.7034211, 13.2007699 55.703423, 13.2011275 55.7034136, 13.2012413 55.7034103, 13.2012947 55.7034088)")
+
+    geom5 = shapely.wkt.loads('POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848603 55.7056619, 13.1846238 55.7056422, 13.1846085 55.7057159, 13.1846356 55.7057179, 13.1848537 55.7057363), (13.1846694 55.705714, 13.1846543 55.7057128, 13.1846563 55.705705, 13.1846714 55.7057062, 13.1846694 55.705714), (13.1847425 55.7057123, 13.1847405 55.7057201, 13.1847254 55.7057188, 13.1847274 55.705711, 13.1847425 55.7057123), (13.1848001 55.7057179, 13.1848152 55.7057192, 13.1848131 55.705727, 13.1847981 55.7057258, 13.1848001 55.7057179), (13.1848068 55.7056929, 13.1848088 55.7056851, 13.1848239 55.7056863, 13.1848218 55.7056941, 13.1848068 55.7056929), (13.1847507 55.7056878, 13.1847356 55.7056865, 13.1847377 55.7056787, 13.1847528 55.70568, 13.1847507 55.7056878), (13.1846811 55.7056732, 13.184679 55.705681, 13.184664 55.7056798, 13.184666 55.705672, 13.1846811 55.7056732))')
+
+    geom6 = shapely.wkt.loads(
+        'POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.184812 55.705646, 13.1848537 55.7057363))')
+    geom7 = shapely.wkt.loads('MULTIPOLYGON (((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848861 55.705646, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1847300 55.705712, 13.1847425 55.7057123)), ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848841 55.705626, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1848861 55.705646, 13.1847425 55.7057123)))')
+    geom8 = shapely.wkt.loads('POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848861 55.705646, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1847300 55.705712, 13.1847425 55.7057123))')
+
+    # print(shapely.get_coordinates(geom7))
+    t, bin3 = x.compress(geom1)
+    t, bin4 = x.compress(geom2)
+
+    # print(x.access_vertex(bin4, 6, getBoundsData=True))
 
 
 if __name__ == "__main__":
     main()
-
