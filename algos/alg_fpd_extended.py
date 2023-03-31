@@ -34,20 +34,16 @@ from bitarray import bitarray, util, bits2bytes
 
 
 class FpdExtended(CompressionAlgorithm):
+    FLOAT_SIZE = 40
     D_CNT_SIZE = 16
     POLY_RING_CNT_SIZE = 16
     RING_CHK_CNT_SIZE = 16
     MAX_NUM_DELTAS = 15  # Max number of deltas in a chunk before split
-    EOF_THRESHOLD = D_CNT_SIZE + 64 * 2  # Number of bits required to continue parsing
+    EOF_THRESHOLD = D_CNT_SIZE + FLOAT_SIZE * 2  # Number of bits required to continue parsing
 
     offset = 0  # Used when parsing
 # ---- HELPER METHODS
 
-    #EASY TO MODIFY TO WHATEVER PRECISION WE WANT :)
-    #HOWEVER, The coordinates will not be exactly as before, a coordinate of 23.4 can be 23.3999999 or 23.4000000 
-    #which might interrupt the integrity check
-    #compression and decompression is also now 3x slower because of "probably" non C writen float conversion
-    
     def float2bin(self, float):
         decimal_part, integral_part = math.modf(float)
         sign = 0 if float > 0 else 1
@@ -72,12 +68,11 @@ class FpdExtended(CompressionAlgorithm):
         res.append(sign)
         res.extend(self.uint_to_ba(exponent,8))
         integral_bin.extend(decimal_bin)
-        while len(integral_bin) < 23:
+        while len(integral_bin) < self.FLOAT_SIZE - 9 + 1:
             integral_bin.append(0)
 
-        res.extend(integral_bin[1:24])
+        res.extend(integral_bin[1:self.FLOAT_SIZE - 9 + 1])
         return res
-
 
 
     def bin2float(self, precision_float):
@@ -85,18 +80,30 @@ class FpdExtended(CompressionAlgorithm):
         exponent = util.ba2int(precision_float[1:9], signed=False) - 127
         decimal_part = precision_float[9:]
         decimal = 1
-        for i in range(1,24):
+        for i in range(1,self.FLOAT_SIZE - 9 + 1):
             decimal += decimal_part[i - 1] * math.pow(2, -i)
         return round(decimal * sign * math.pow(2,exponent),7)
-        
+    
 
+    def bits2Long(self, bits):
+        res = 0
+        for ele in bits:
+            res = (res << 1) | ele
+        return res
+    
+    def long2bits(self, num):      
+        binary = bin(num)[2:]
+        res =  bitarray()
+        res.extend('0' * (self.FLOAT_SIZE - len(binary)))
+        res.extend(binary)
+        return res
+
+   
     def double_as_long(self, num):
-        return struct.unpack('!l', self.float2bin(num))[0]
+        return self.bits2Long(self.float2bin(num))
 
     def long_as_double(self, num):
-        bin = bitarray(endian='big')
-        bin.frombytes(struct.pack('!l', num))
-        return self.bin2float(bin)
+        return self.bin2float(self.long2bits(num))
     
     def double_to_bytes(self, x):
         return self.float2bin(x)
@@ -178,7 +185,7 @@ class FpdExtended(CompressionAlgorithm):
     def decode_header(self, bin, get_idxs=False):
         delta_size, type = struct.unpack_from('!BB', bin)
         type = GT(type)
-        self.offset += 2 * 8 + 4 * 64  # Offset is 2 bytes for BB + 64 * 4 for bounding box
+        self.offset += 2 * 8 + 4 * self.FLOAT_SIZE  # Offset is 2 bytes for BB + 64 * 4 for bounding box
 
         # Code segment needed for extracting sorted indexes
         # coord_count = self.bytes_to_uint(bin, 4 * 8)
@@ -282,7 +289,7 @@ class FpdExtended(CompressionAlgorithm):
         # print([int.from_bytes(i, 'big') for i in bytes], '\n')
         return bits.tobytes()
 
-    def bytes_to_decoded_coord(self, bin, prev_coord, input_size=64):
+    def bytes_to_decoded_coord(self, bin, prev_coord, input_size=32):
         bin = bin[self.offset: self.offset + input_size]
         val = util.ba2int(bin, signed=False)
         val = self.zz_decode(val) + self.double_as_long(prev_coord)
@@ -291,9 +298,9 @@ class FpdExtended(CompressionAlgorithm):
         return val
 
     def bytes_to_double(self, bin):
-        bin = bin[self.offset:self.offset + 64]
-        val = struct.unpack('!d', bin)[0]
-        self.offset += 8 * 8
+        bin = bin[self.offset:self.offset + self.FLOAT_SIZE]
+        val = self.bin2float(bin)
+        self.offset += self.FLOAT_SIZE
         return val
 
     def bytes_to_uint(self, bin, len):
@@ -311,7 +318,7 @@ class FpdExtended(CompressionAlgorithm):
         for _ in range(chk_size):
             x = self.bytes_to_decoded_coord(bin, x, delta_size)
             y = self.bytes_to_decoded_coord(bin, y, delta_size)
-            seq_list.append((x, y))
+            seq_list.append((float("{:.7f}".format(x)), float("{:.7f}".format(y))))
 
     def ring_decoder(self, bin, polygon_list, delta_size):
         # Extract number of chunks for a ring
@@ -358,7 +365,7 @@ class FpdExtended(CompressionAlgorithm):
 
     def calculate_delta_size(self, geometry, return_deltas=False):
         deltas = [[], []]
-        RESET_POINT_SIZE = 64 * 2 + self.D_CNT_SIZE
+        RESET_POINT_SIZE = self.FLOAT_SIZE * 2 + self.D_CNT_SIZE
         coords = shapely.get_coordinates(geometry)
         prev = [0, 0]
         bit_cnts = {}
