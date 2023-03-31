@@ -9,17 +9,18 @@ import numpy as np
 from shapely import GeometryType as GT
 from bitarray import bitarray, util, bits2bytes
 
+
 def append_intersection_header(self, bits, geometry):
-    print("hej")
+    pass
 
 
 class Intersection:
     ALG = None
     func = None
+
     def __init__(self, ALG) -> None:
         self.ALG = ALG
         self.func = Funcs(ALG)
-
 
     def is_intersecting(self, args):
         l_bin, r_bin = args
@@ -31,7 +32,7 @@ class Intersection:
 
         t = time.perf_counter()
         return t - s, res
-    
+
     def intersection(self, args):
         l_bin, r_bin = args
         s = time.perf_counter()
