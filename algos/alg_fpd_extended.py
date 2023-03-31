@@ -7,8 +7,8 @@ sys.path.append(str(root))
 
 from algos.base import CompressionAlgorithm
 from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import *
-from algos.fpd_extended_lib.add_vertex import AddVertex
-from algos.fpd_extended_lib.functions import *
+ from algos.fpd_extended_lib.add_vertex import AddVertex
+ from algos.fpd_extended_lib.functions import *
 
 from collections import deque
 import shapely
@@ -43,6 +43,47 @@ class FpdExtended(CompressionAlgorithm):
 
     offset = 0  # Used when parsing
 # ---- HELPER METHODS
+
+    def float2bin(self, float):
+        decimal_part, integral_part = math.modf(float)
+        sign = 0 if float > 0 else 1
+        decimal_part = decimal_part * (1 - sign * 2)
+        integral_part = int(integral_part) * (1 - sign * 2)
+
+        integral_bin = bitarray()
+        while(integral_part >= 1):
+            integral_bin.append(integral_part % 2)
+            integral_part = integral_part >> 1
+        integral_bin.reverse()
+
+        decimal_bin = bitarray()
+        while(decimal_part != 0):
+            decimal_part *= 2
+            decimal_bin.append(0 if decimal_part < 1 else 1)
+            if decimal_part >= 1:
+                decimal_part -= 1
+        
+        exponent = 127 + len(integral_bin) - 1
+        res = bitarray()
+        res.append(sign)
+        res.extend(self.uint_to_ba(exponent,8))
+        integral_bin.extend(decimal_bin)
+        while len(integral_bin) < self.FLOAT_SIZE - 9 + 1:
+            integral_bin.append(0)
+
+        res.extend(integral_bin[1:self.FLOAT_SIZE - 9 + 1])
+        return res
+
+
+    def bin2float(self, precision_float):
+        sign = (1 + (-2 * precision_float[0]))
+        exponent = util.ba2int(precision_float[1:9], signed=False) - 127
+        decimal_part = precision_float[9:]
+        decimal = 1
+        for i in range(1,self.FLOAT_SIZE - 9 + 1):
+            decimal += decimal_part[i - 1] * math.pow(2, -i)
+        return round(decimal * sign * math.pow(2,exponent),7)
+    
     
     def bits2Long(self, bits):
         res = 0
@@ -119,7 +160,6 @@ class FpdExtended(CompressionAlgorithm):
                 ring_count.append(poly_ring_count)
         return ring_count
 
- 
     def append_header(self, bits, geometry, d_size):
         # Meta data
         bits.frombytes(self.uchar_to_bytes(d_size))
@@ -130,16 +170,13 @@ class FpdExtended(CompressionAlgorithm):
         bits.frombytes(self.double_to_bytes(bounds[1]))
         bits.frombytes(self.double_to_bytes(bounds[2]))
         bits.frombytes(self.double_to_bytes(bounds[3]))
-        
-        #append_intersection_header(self, bits, geometry)
 
+        append_intersection_header(self, bits, geometry)
    
     def decode_header(self, bin, get_idxs=False):
         delta_size, type = struct.unpack_from('!BB', bin)
         type = GT(type)
         self.offset += 2 * 8 + 4 * self.FLOAT_SIZE  # Offset is 2 bytes for BB + 64 * 4 for bounding box
-        # Code segment needed for extracting sorted indexe
-      
         return delta_size, type
 
     def append_delta_pair(self, bits, d_x_zig, d_y_zig, d_size):
@@ -352,9 +389,8 @@ class FpdExtended(CompressionAlgorithm):
         t = time.perf_counter()
         return t - s, geometry
 
-
-# Export helper functions
-    get_chunks = get_chunks
+    # Export helper functions
+     get_chunks = get_chunks
 # ---- UNARY ---- #
 
     def vertices(self, bin):
@@ -378,47 +414,6 @@ class FpdExtended(CompressionAlgorithm):
     def intersection(self, args):
         return Intersection(self).intersection(args)
 
-    def float2bin(self, float):
-        decimal_part, integral_part = math.modf(float)
-        sign = 0 if float > 0 else 1
-        decimal_part = decimal_part * (1 - sign * 2)
-        integral_part = int(integral_part) * (1 - sign * 2)
-
-        integral_bin = bitarray()
-        while(integral_part >= 1):
-            integral_bin.append(integral_part % 2)
-            integral_part = integral_part >> 1
-        integral_bin.reverse()
-
-        decimal_bin = bitarray()
-        while(decimal_part != 0):
-            decimal_part *= 2
-            decimal_bin.append(0 if decimal_part < 1 else 1)
-            if decimal_part >= 1:
-                decimal_part -= 1
-        
-        exponent = 127 + len(integral_bin) - 1
-        res = bitarray()
-        res.append(sign)
-        res.extend(self.uint_to_ba(exponent,8))
-        integral_bin.extend(decimal_bin)
-        while len(integral_bin) < self.FLOAT_SIZE - 9 + 1:
-            integral_bin.append(0)
-
-        res.extend(integral_bin[1:self.FLOAT_SIZE - 9 + 1])
-        return res
-
-
-    def bin2float(self, precision_float):
-        sign = (1 + (-2 * precision_float[0]))
-        exponent = util.ba2int(precision_float[1:9], signed=False) - 127
-        decimal_part = precision_float[9:]
-        decimal = 1
-        for i in range(1,self.FLOAT_SIZE - 9 + 1):
-            decimal += decimal_part[i - 1] * math.pow(2, -i)
-        return round(decimal * sign * math.pow(2,exponent),7)
-    
-
 
 def main():
     import random
@@ -439,3 +434,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
