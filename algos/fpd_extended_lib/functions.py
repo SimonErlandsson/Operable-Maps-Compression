@@ -35,7 +35,6 @@ def get_chunks(self, bin_in):
         # Extract reset point
         x = self.bytes_to_double(bin)
         y = self.bytes_to_double(bin)
-        print(x, y)
         # if chunks_in_ring_left == chunks_in_ring:
         # x_ring, y_ring = (x, y)
 
