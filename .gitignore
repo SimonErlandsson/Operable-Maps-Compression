@@ -4,6 +4,7 @@ reports/
 data/*
 
 !data/intersection
+!data/sweden.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
