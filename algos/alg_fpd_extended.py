@@ -7,8 +7,8 @@ sys.path.append(str(root))
 
 from algos.base import CompressionAlgorithm
 from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import *
- from algos.fpd_extended_lib.add_vertex import AddVertex
- from algos.fpd_extended_lib.functions import *
+from algos.fpd_extended_lib.add_vertex import AddVertex
+from algos.fpd_extended_lib.functions import *
 
 from collections import deque
 import shapely
@@ -34,7 +34,7 @@ from bitarray import bitarray, util, bits2bytes
 
 
 class FpdExtended(CompressionAlgorithm):
-    FLOAT_SIZE = 40
+    FLOAT_SIZE = 64
     D_CNT_SIZE = 16
     POLY_RING_CNT_SIZE = 16
     RING_CHK_CNT_SIZE = 16
@@ -276,7 +276,7 @@ class FpdExtended(CompressionAlgorithm):
         self.offset += inputsize
         return val
 
-    def bytes_to_double(self, bin):
+    def bytes_to_double(self, bin, offset = None):
         bin = bin[self.offset:self.offset + self.FLOAT_SIZE]
         val = self.bin2float(bin)
         self.offset += self.FLOAT_SIZE
@@ -390,7 +390,7 @@ class FpdExtended(CompressionAlgorithm):
         return t - s, geometry
 
     # Export helper functions
-     get_chunks = get_chunks
+    get_chunks = get_chunks
 # ---- UNARY ---- #
 
     def vertices(self, bin):
@@ -428,8 +428,8 @@ def main():
 
     t, bin = x.compress(geom1)
     t, geomx = x.decompress(bin)
-    print(geom1)
-    print(geomx)
+    print(x.bounding_box(bin))
+    
 
 
 if __name__ == "__main__":

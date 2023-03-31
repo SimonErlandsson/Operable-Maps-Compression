@@ -103,7 +103,7 @@ class Funcs:
 
             # Jump to next chunk
             p_idx += 1 + deltas_in_chunk
-            self.ALG.offset += 64 * 2 + delta_size * 2 * deltas_in_chunk
+            self.ALG.offset += self.ALG.FLOAT_SIZE * 2 + delta_size * 2 * deltas_in_chunk
             chunks_in_ring_left -= 1
             if (chunks_in_ring_left == 0):
                 if idx_found:
@@ -155,7 +155,11 @@ class Funcs:
 
     def bounding_box(self, bin):
         s = time.perf_counter()
-        bounds = list(struct.unpack_from('!dddd', bin, offset=2))  # Skip first part of header
+        
+        bounds = []
+        res = bitarray()
+        res.frombytes(bin)
+        bounds = [self.ALG.bin2float(res[2 * 8 +  self.ALG.FLOAT_SIZE * i: 2 * 8 + self.ALG.FLOAT_SIZE * (i + 1)]) for i in range(4)]
         t = time.perf_counter()
         return t - s, bounds
     
