@@ -43,14 +43,63 @@ class FpdExtended(CompressionAlgorithm):
     offset = 0  # Used when parsing
 # ---- HELPER METHODS
 
+    #EASY TO MODIFY TO WHATEVER PRECISION WE WANT :)
+    #HOWEVER, The coordinates will not be exactly as before, a coordinate of 23.4 can be 23.3999999 or 23.4000000 
+    #which might interrupt the integrity check
+    #compression and decompression is also now 3x slower because of "probably" non C writen float conversion
+    
+    def float2bin(self, float):
+        decimal_part, integral_part = math.modf(float)
+        sign = 0 if float > 0 else 1
+        decimal_part = decimal_part * (1 - sign * 2)
+        integral_part = int(integral_part) * (1 - sign * 2)
+
+        integral_bin = bitarray()
+        while(integral_part >= 1):
+            integral_bin.append(integral_part % 2)
+            integral_part = integral_part >> 1
+        integral_bin.reverse()
+
+        decimal_bin = bitarray()
+        while(decimal_part != 0):
+            decimal_part *= 2
+            decimal_bin.append(0 if decimal_part < 1 else 1)
+            if decimal_part >= 1:
+                decimal_part -= 1
+        
+        exponent = 127 + len(integral_bin) - 1
+        res = bitarray()
+        res.append(sign)
+        res.extend(self.uint_to_ba(exponent,8))
+        integral_bin.extend(decimal_bin)
+        while len(integral_bin) < 23:
+            integral_bin.append(0)
+
+        res.extend(integral_bin[1:24])
+        return res
+
+
+
+    def bin2float(self, precision_float):
+        sign = (1 + (-2 * precision_float[0]))
+        exponent = util.ba2int(precision_float[1:9], signed=False) - 127
+        decimal_part = precision_float[9:]
+        decimal = 1
+        for i in range(1,24):
+            decimal += decimal_part[i - 1] * math.pow(2, -i)
+        return round(decimal * sign * math.pow(2,exponent),7)
+        
+
     def double_as_long(self, num):
-        return struct.unpack('!q', struct.pack('!d', num))[0]
+        return struct.unpack('!l', self.float2bin(num))[0]
 
     def long_as_double(self, num):
-        return struct.unpack('!d', struct.pack('!q', num))[0]
-
+        bin = bitarray(endian='big')
+        bin.frombytes(struct.pack('!l', num))
+        return self.bin2float(bin)
+    
     def double_to_bytes(self, x):
-        return struct.pack("!d", x)
+        return self.float2bin(x)
 
     # Inline refactorized from https://github.com/ilanschnell/bitarray/blob/master/bitarray/util.py
 
