@@ -1,8 +1,9 @@
 data/test*
 reports/
 .DS_Store
-data/latest_export.json
-data/
+data/*
+
+!data/intersection
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
