@@ -2,16 +2,14 @@ import time
 from shapely import GeometryType as GT
 import bisect
 from bitarray import bitarray
-from algos.fpd_extended_lib.functions import Funcs
 
 
 class AddVertex:
     ALG = None
     funcs = None
+
     def __init__(self, ALG) -> None:
         self.ALG = ALG
-        self.funcs = Funcs(ALG)
-
 
     def add_vertex(self, args):
         def create_chunk(reset_point, delta_cnt=0):
@@ -98,7 +96,7 @@ class AddVertex:
                     new = create_chunk(pos)
                     bin.extend(new)
                     break
-                
+
         bin = bin.tobytes()
         t = time.perf_counter()
         return t - s, bin

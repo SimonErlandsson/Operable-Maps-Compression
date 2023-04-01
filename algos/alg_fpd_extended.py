@@ -354,19 +354,14 @@ class FpdExtended(CompressionAlgorithm):
 
     # Export helper functions
     get_chunks = get_chunks
+    access_vertex_chk = access_vertex_chk
+    access_vertex = access_vertex
 
 
 # ---- UNARY ---- #
-
-
-    def vertices(self, bin):
-        return Funcs(self).vertices(bin)
-
-    def type(self, bin):
-        return Funcs(self).type(bin)
-
-    def bounding_box(self, bin):
-        return Funcs(self).bounding_box(bin)
+    vertices = vertices
+    type = type
+    bounding_box = bounding_box
 
     # TODO: Handle bounding box
     def add_vertex(self, args):
@@ -374,11 +369,8 @@ class FpdExtended(CompressionAlgorithm):
 
 # ---- BINARY ---- #
 
-    def is_intersecting(self, args):
-        return Intersection(self).is_intersecting(args)
-
-    def intersection(self, args):
-        return Intersection(self).intersection(args)
+    is_intersecting = is_intersecting
+    intersection = intersection
 
 
 def main():
