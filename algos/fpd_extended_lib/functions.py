@@ -30,7 +30,6 @@ def get_chunks(self, bin_in):
         if is_multipolygon and rings_left == 0:
             rings_left = self.bytes_to_uint(bin, self.POLY_RING_CNT_SIZE)
         if not is_linestring and chunks_in_ring_left == 0:
-            rings_left = 1
             chunks_in_ring_left = self.bytes_to_uint(bin, self.RING_CHK_CNT_SIZE)
             chunks_in_ring = chunks_in_ring_left
 

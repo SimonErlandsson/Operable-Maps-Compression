@@ -7,13 +7,9 @@ random.seed(13)
 
 def xs(pts): return [p[0] for p in pts]
 def ys(pts): return [p[1] for p in pts]
-
-
 def inv_color(shp): return (1 - color(shp)[0], 1 - color(shp)[1], 1 - color(shp)[2])
 
-
 colors = {}
-
 
 def color(shp):
     wkt = shapely.to_wkt(shp)
@@ -27,11 +23,11 @@ def bbox_coords(geom):
     return [(x_l, y_b), (x_l, y_t), (x_r, y_t), (x_r, y_b), (x_l, y_b)]
 
 
-def plot_geometry(geom, SHOW_GEOMETRIES=True):
+def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True):
     if SHOW_GEOMETRIES:
         geom_type = shapely.get_type_id(geom)
         rings = []
-        if geom_type == GT.LINESTRING:
+        if geom_type == GT.LINESTRING or geom_type == GT.POINT:
             pts = shapely.get_coordinates(geom)
             rings = [pts]
         else:
@@ -43,7 +39,7 @@ def plot_geometry(geom, SHOW_GEOMETRIES=True):
 
         for ring_points in rings:
             plt.fill(xs(ring_points), ys(ring_points), color=color(geom), alpha=0.1)
-            plt.plot(xs(ring_points), ys(ring_points), color=color(geom))
+            plt.plot(xs(ring_points), ys(ring_points), '-' if solid else '--', color=color(geom))
 
 
 def plot_geometry_bbox(geom, SHOW_BOUNDING_BOXES=True, solid=False):
@@ -78,6 +74,7 @@ fpd = FpdExtended()
 
 def calculate_chunks_bounds(bin, include_next_chunk_start=True):
     chunks, is_last_chunk_ring = fpd.get_chunks(bin)
+    _, type = fpd.type(bin)
     chunks_bounds = []
     chunks_vertices = []
     chk_idx_ring_start = 0
@@ -87,7 +84,7 @@ def calculate_chunks_bounds(bin, include_next_chunk_start=True):
             xs.append(chunks[chk_idx_ring_start][0][0])
             ys.append(chunks[chk_idx_ring_start][0][1])
             chk_idx_ring_start = idx + 1
-        else:
+        elif type != 'LineString':
             xs.append(chunks[idx + 1][0][0])
             ys.append(chunks[idx + 1][0][1])
         chunks_bounds.append([min(xs), min(ys), max(xs), max(ys)])
@@ -95,7 +92,7 @@ def calculate_chunks_bounds(bin, include_next_chunk_start=True):
     return chunks_bounds, chunks_vertices
 
 
-def plot_chunks_bounds(bin_in, include_next_chunk_start=False, avoid_create_frame=False, avoid_show=False, idxs=None):
+def plot_chunks_bounds(bin_in, include_next_chunk_start=False, avoid_create_frame=False, avoid_show=False, idxs=None, txt=''):
     if not avoid_create_frame:
         fig = plt.figure()
         zoom = 2.5
@@ -123,6 +120,6 @@ def plot_chunks_bounds(bin_in, include_next_chunk_start=False, avoid_create_fram
     _, geom = fpd.decompress(bin_in)
     plot_geometry(geom)
 
-    plt.title("Chunk Bounds" if not include_next_chunk_start else "Chunk Bounds - With Connecting Borders")
+    plt.title(("Chunk Bounds" if not include_next_chunk_start else "Chunk Bounds - With Connecting Borders") + str(txt))
     if not avoid_show:
         plt.show()
