@@ -34,7 +34,7 @@ from bitarray import bitarray, util, bits2bytes
 
 
 class FpdExtended(CompressionAlgorithm):
-    FLOAT_SIZE = 64
+    FLOAT_SIZE = 40
     D_CNT_SIZE = 16
     POLY_RING_CNT_SIZE = 16
     RING_CHK_CNT_SIZE = 16
@@ -57,13 +57,51 @@ class FpdExtended(CompressionAlgorithm):
         integral_bin.reverse()
 
         decimal_bin = bitarray()
+        beg_bits_zero, had_1s = 0, False
         while(decimal_part != 0):
             decimal_part *= 2
-            decimal_bin.append(0 if decimal_part < 1 else 1)
+            rem = 0 if decimal_part < 1 else 1
+            if not had_1s and len(integral_bin) == 0:
+                if rem == 0:
+                    beg_bits_zero += 1
+                    continue
+                else:
+                    had_1s = True
+                    
+            decimal_bin.append(rem)
             if decimal_part >= 1:
                 decimal_part -= 1
         
-        exponent = 127 + len(integral_bin) - 1
+        if len(integral_bin) == 0:
+            exponent = 127 - beg_bits_zero - 1
+        else:
+            exponent = 127 + len(integral_bin) - 1
+
+
+
+        # decimal_bin = bitarray()
+        # beg_bits_zero, had_1s = 0, False
+
+        # while(decimal_part != 0):
+        #     decimal_part *= 2
+        #     rem = 0 if decimal_part < 1 else 1
+
+        #     #Case for 0 integer part
+        #     if not had_1s:
+        #         if rem == 0:
+        #             beg_bits_zero += 1
+        #         else:
+        #             had_1s = True
+                    
+        #     if had_1s or len(integral_bin) != 0:
+        #         decimal_bin.append(rem)
+
+        #     if decimal_part >= 1:
+        #         decimal_part -= 1
+
+      
+
+
         res = bitarray()
         res.append(sign)
         res.extend(self.uint_to_ba(exponent,8))
@@ -428,7 +466,7 @@ def main():
 
     t, bin = x.compress(geom1)
     t, geomx = x.decompress(bin)
-    print(x.bounding_box(bin))
+    print(x.bin2float(x.float2bin(-180.12223)))
     
 
 
