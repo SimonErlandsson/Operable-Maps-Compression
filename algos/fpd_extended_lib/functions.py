@@ -8,7 +8,8 @@ import bisect
 from bitarray import bitarray, util, bits2bytes
 
 
-# Only used for non-timed operations
+# Only used for non-timed operations, i.e. debugging/testing implementations
+# NOTE: Also returns the first ring coordinate when reaching end of ring!
 def get_chunks(self, bin_in):
     chunks = []
     self.offset = 0
@@ -38,8 +39,8 @@ def get_chunks(self, bin_in):
         # Extract reset point
         x = self.bytes_to_double(bin)
         y = self.bytes_to_double(bin)
-        # if chunks_in_ring_left == chunks_in_ring:
-        # x_ring, y_ring = (x, y)
+        if chunks_in_ring_left == chunks_in_ring:
+            x_ring, y_ring = (x, y)
 
         chunk = [[x, y]]
         # Loop through deltas in chunk
@@ -51,7 +52,7 @@ def get_chunks(self, bin_in):
         is_last_ring_chunk.append(False)
         chunks_in_ring_left -= 1
         if chunks_in_ring_left == 0:
-            # chunks.append([x_ring, y_ring])
+            chunks[-1].append([x_ring, y_ring])
             rings_left -= 1
             is_last_ring_chunk[-1] = True
     return chunks, is_last_ring_chunk

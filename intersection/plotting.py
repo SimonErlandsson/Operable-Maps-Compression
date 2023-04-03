@@ -9,7 +9,9 @@ def xs(pts): return [p[0] for p in pts]
 def ys(pts): return [p[1] for p in pts]
 def inv_color(shp): return (1 - color(shp)[0], 1 - color(shp)[1], 1 - color(shp)[2])
 
+
 colors = {}
+
 
 def color(shp):
     wkt = shapely.to_wkt(shp)
@@ -80,11 +82,7 @@ def calculate_chunks_bounds(bin, include_next_chunk_start=True):
     chk_idx_ring_start = 0
     for idx, chunk in enumerate(chunks):
         xs, ys = [coord[0] for coord in chunk], [coord[1] for coord in chunk]
-        if is_last_chunk_ring[idx]:
-            xs.append(chunks[chk_idx_ring_start][0][0])
-            ys.append(chunks[chk_idx_ring_start][0][1])
-            chk_idx_ring_start = idx + 1
-        elif type != 'LineString':
+        if not is_last_chunk_ring[idx] and type != 'LineString':
             xs.append(chunks[idx + 1][0][0])
             ys.append(chunks[idx + 1][0][1])
         chunks_bounds.append([min(xs), min(ys), max(xs), max(ys)])
