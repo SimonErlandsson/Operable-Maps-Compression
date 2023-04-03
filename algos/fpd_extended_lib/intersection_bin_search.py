@@ -214,7 +214,7 @@ class Intersection:
     def decode_header(self, bin, get_idxs=False):
         delta_size, type = struct.unpack_from('!BB', bin)
         type = GT(type)
-        self.offset += 2 * 8 + 4 * 64  # Offset is 2 bytes for BB + 64 * 4 for bounding box
+        self.offset += 2 * 8 + 4 * self.ALG.FLOAT_SIZE   # Offset is 2 bytes for BB + 64 * 4 for bounding box
 
         # Code segment needed for extracting sorted indexes
         coord_count = self.bytes_to_uint(bin, 4 * 8)
