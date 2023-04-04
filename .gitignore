@@ -4,6 +4,7 @@ reports/
 data/*
 
 !data/intersection
+!data/sweden.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -135,5 +136,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-data/intersection/world
 data/intersection/world.json

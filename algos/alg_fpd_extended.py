@@ -21,6 +21,7 @@ import numpy as np
 from shapely import GeometryType as GT
 import bisect
 from bitarray import bitarray, util, bits2bytes
+from var_float import VarFloat
 
 #####                 #####
 # --- FP-DELTA BASELINE ---#
@@ -34,6 +35,9 @@ from bitarray import bitarray, util, bits2bytes
 
 
 class FpdExtended(CompressionAlgorithm):
+    USE_DEFAULT_DOUBLE = False
+    FLOAT_SIZE = 40
+    EXPONENT = 6
     D_CNT_SIZE = 16
     POLY_RING_CNT_SIZE = 16
     RING_CHK_CNT_SIZE = 16
@@ -43,14 +47,31 @@ class FpdExtended(CompressionAlgorithm):
     offset = 0  # Used when parsing
 # ---- HELPER METHODS
 
+    var_float = VarFloat(EXPONENT, FLOAT_SIZE)
+
     def double_as_long(self, num):
-        return struct.unpack('!q', struct.pack('!d', num))[0]
+        if self.USE_DEFAULT_DOUBLE:
+            return struct.unpack('!q', struct.pack('!d', num))[0]
+        else:
+            return self.var_float.bits_to_long(self.var_float.float_to_bin(num))
 
     def long_as_double(self, num):
-        return struct.unpack('!d', struct.pack('!q', num))[0]
-
+        if self.USE_DEFAULT_DOUBLE:
+            return struct.unpack('!d', struct.pack('!q', num))[0]
+        else:
+            return self.var_float.bin_to_float(self.var_float.long_to_bits(num))
+        
     def double_to_bytes(self, x):
-        return struct.pack("!d", x)
+        if self.USE_DEFAULT_DOUBLE:
+            return struct.pack("!d", x)
+        else:
+            return self.var_float.float_to_bin(x)
+    
+    def bin_to_double(self, bin):
+        if self.USE_DEFAULT_DOUBLE:
+            return struct.unpack('!d', bin)[0]
+        else:
+            return self.var_float.bin_to_float(bin)
 
     # Inline refactorized from https://github.com/ilanschnell/bitarray/blob/master/bitarray/util.py
 
@@ -240,10 +261,10 @@ class FpdExtended(CompressionAlgorithm):
         self.offset += input_size
         return val
 
-    def bytes_to_double(self, bin):
-        bin = bin[self.offset:self.offset + 64]
-        val = struct.unpack('!d', bin)[0]
-        self.offset += 8 * 8
+    def bytes_to_double(self, bin, offset = None):
+        bin = bin[self.offset:self.offset + self.FLOAT_SIZE]
+        val = self.bin_to_double(bin)
+        self.offset += self.FLOAT_SIZE
         return val
 
     def bytes_to_uint(self, bin, len):
@@ -402,6 +423,10 @@ def main():
     t, bin4 = x.compress(geom2)
 
     # print(x.access_vertex(bin4, 6, getBoundsData=True))
+    t, bin = x.compress(geom1)
+    t, geomx = x.decompress(bin)
+    print(x.bin2float(x.float2bin(-180.12223)))
+    
 
 
 if __name__ == "__main__":

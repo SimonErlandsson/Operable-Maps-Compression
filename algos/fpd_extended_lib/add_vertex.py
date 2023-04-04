@@ -55,7 +55,7 @@ class AddVertex:
                 # print(deltas_left, deltas_right)
                 # Handle left
                 if p_idx != insert_idx:  # Has a left coordinate?
-                    split = deltas_in_chunk_offset + self.ALG.D_CNT_SIZE + 64 * 2 + delta_size * 2 * deltas_left
+                    split = deltas_in_chunk_offset + self.ALG.D_CNT_SIZE + self.ALG.FLOAT_SIZE * 2 + delta_size * 2 * deltas_left
                     # Update delta cnt
                     bin[deltas_in_chunk_offset:deltas_in_chunk_offset + self.ALG.D_CNT_SIZE] = self.ALG.uint_to_ba(deltas_left, self.ALG.D_CNT_SIZE)
                 else:
@@ -86,7 +86,7 @@ class AddVertex:
             else:
                 # Jump to next chunk
                 p_idx += 1 + deltas_in_chunk + (1 if chunks_in_ring_left == 1 else 0)
-                self.ALG.offset += 64 * 2 + delta_size * 2 * deltas_in_chunk
+                self.ALG.offset += self.ALG.FLOAT_SIZE * 2 + delta_size * 2 * deltas_in_chunk
                 chunks_in_ring_left -= 1
                 if (chunks_in_ring_left == 0):
                     rings_left -= 1
