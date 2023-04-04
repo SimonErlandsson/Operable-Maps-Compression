@@ -108,10 +108,9 @@ def has_line_intersection(bins, bbox, debug_correct_ans, plot_all=False):
                 if plot_all or debug_correct_ans != None and debug_correct_ans != (len(intersecting_points) > 0):
                     for cs in segments[0] + segments[1]:
                         plot_geometry(cs)
-                    plt.show()
-                    # plot_intersecting_points(intersecting_points)
-                    # plot_chunks_bounds(bins[0], include_next_chunk_start=True, avoid_show=True, idxs=chks[0])
-                    # plot_chunks_bounds(bins[1], include_next_chunk_start=True, avoid_create_frame=True, idxs=chks[1], txt=f" : was {len(intersecting_points) > 0} expected {debug_correct_ans}")
+                    plot_intersecting_points(intersecting_points)
+                    plot_chunks_bounds(bins[0], include_next_chunk_start=True, avoid_show=True, idxs=chks[0])
+                    plot_chunks_bounds(bins[1], include_next_chunk_start=True, avoid_create_frame=True, idxs=chks[1], txt=f" : was {len(intersecting_points) > 0} expected {debug_correct_ans}")
                 # END ----------------------
                 return True
     return False
