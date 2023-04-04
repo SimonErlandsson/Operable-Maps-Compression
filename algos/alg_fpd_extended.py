@@ -35,8 +35,8 @@ from var_float import VarFloat
 
 
 class FpdExtended(CompressionAlgorithm):
-    USE_DEFAULT_DOUBLE = False
-    FLOAT_SIZE = 40
+    USE_DEFAULT_DOUBLE = True
+    FLOAT_SIZE = 64
     EXPONENT = 6
     D_CNT_SIZE = 16
     POLY_RING_CNT_SIZE = 16
