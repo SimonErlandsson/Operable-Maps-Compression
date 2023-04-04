@@ -159,7 +159,7 @@ class Funcs:
         bounds = []
         res = bitarray()
         res.frombytes(bin)
-        bounds = [self.ALG.bin2float(res[2 * 8 +  self.ALG.FLOAT_SIZE * i: 2 * 8 + self.ALG.FLOAT_SIZE * (i + 1)]) for i in range(4)]
+        bounds = [self.ALG.bin_to_double(res[2 * 8 +  self.ALG.FLOAT_SIZE * i: 2 * 8 + self.ALG.FLOAT_SIZE * (i + 1)]) for i in range(4)]
         t = time.perf_counter()
         return t - s, bounds
     

@@ -20,6 +20,7 @@ import numpy as np
 from shapely import GeometryType as GT
 import bisect
 from bitarray import bitarray, util, bits2bytes
+from var_float import VarFloat
 
 
 #####                 #####
@@ -34,7 +35,9 @@ from bitarray import bitarray, util, bits2bytes
 
 
 class FpdExtended(CompressionAlgorithm):
+    USE_DEFAULT_DOUBLE = False
     FLOAT_SIZE = 40
+    EXPONENT = 6
     D_CNT_SIZE = 16
     POLY_RING_CNT_SIZE = 16
     RING_CHK_CNT_SIZE = 16
@@ -44,107 +47,31 @@ class FpdExtended(CompressionAlgorithm):
     offset = 0  # Used when parsing
 # ---- HELPER METHODS
 
-    def float2bin(self, float):
-        decimal_part, integral_part = math.modf(float)
-        sign = 0 if float > 0 else 1
-        decimal_part = decimal_part * (1 - sign * 2)
-        integral_part = int(integral_part) * (1 - sign * 2)
+    var_float = VarFloat(EXPONENT, FLOAT_SIZE)
 
-        integral_bin = bitarray()
-        while(integral_part >= 1):
-            integral_bin.append(integral_part % 2)
-            integral_part = integral_part >> 1
-        integral_bin.reverse()
-
-        decimal_bin = bitarray()
-        beg_bits_zero, had_1s = 0, False
-        while(decimal_part != 0):
-            decimal_part *= 2
-            rem = 0 if decimal_part < 1 else 1
-            if not had_1s and len(integral_bin) == 0:
-                if rem == 0:
-                    beg_bits_zero += 1
-                    continue
-                else:
-                    had_1s = True
-                    
-            decimal_bin.append(rem)
-            if decimal_part >= 1:
-                decimal_part -= 1
-        
-        if len(integral_bin) == 0:
-            exponent = 127 - beg_bits_zero - 1
-        else:
-            exponent = 127 + len(integral_bin) - 1
-
-
-
-        # decimal_bin = bitarray()
-        # beg_bits_zero, had_1s = 0, False
-
-        # while(decimal_part != 0):
-        #     decimal_part *= 2
-        #     rem = 0 if decimal_part < 1 else 1
-
-        #     #Case for 0 integer part
-        #     if not had_1s:
-        #         if rem == 0:
-        #             beg_bits_zero += 1
-        #         else:
-        #             had_1s = True
-                    
-        #     if had_1s or len(integral_bin) != 0:
-        #         decimal_bin.append(rem)
-
-        #     if decimal_part >= 1:
-        #         decimal_part -= 1
-
-      
-
-
-        res = bitarray()
-        res.append(sign)
-        res.extend(self.uint_to_ba(exponent,8))
-        integral_bin.extend(decimal_bin)
-        while len(integral_bin) < self.FLOAT_SIZE - 9 + 1:
-            integral_bin.append(0)
-
-        res.extend(integral_bin[1:self.FLOAT_SIZE - 9 + 1])
-        return res
-
-
-    def bin2float(self, precision_float):
-        sign = (1 + (-2 * precision_float[0]))
-        exponent = util.ba2int(precision_float[1:9], signed=False) - 127
-        decimal_part = precision_float[9:]
-        decimal = 1
-        for i in range(1,self.FLOAT_SIZE - 9 + 1):
-            decimal += decimal_part[i - 1] * math.pow(2, -i)
-        return round(decimal * sign * math.pow(2,exponent),7)
-    
-    
-    def bits2Long(self, bits):
-        res = 0
-        for ele in bits:
-            res = (res << 1) | ele
-        return res
-    
-    def long2bits(self, num):      
-        binary = bin(num)[2:]
-        res =  bitarray()
-        res.extend('0' * (self.FLOAT_SIZE - len(binary)))
-        res.extend(binary)
-        return res
-
-   
     def double_as_long(self, num):
-        return self.bits2Long(self.float2bin(num))
+        if self.USE_DEFAULT_DOUBLE:
+            return struct.unpack('!q', struct.pack('!d', num))[0]
+        else:
+            return self.var_float.bits_to_long(self.var_float.float_to_bin(num))
 
     def long_as_double(self, num):
-        return self.bin2float(self.long2bits(num))
-    
+        if self.USE_DEFAULT_DOUBLE:
+            return struct.unpack('!d', struct.pack('!q', num))[0]
+        else:
+            return self.var_float.bin_to_float(self.var_float.long_to_bits(num))
+        
     def double_to_bytes(self, x):
-        return self.float2bin(x)
+        if self.USE_DEFAULT_DOUBLE:
+            return struct.pack("!d", x)
+        else:
+            return self.var_float.float_to_bin(x)
+    
+    def bin_to_double(self, bin):
+        if self.USE_DEFAULT_DOUBLE:
+            return struct.unpack('!d', bin)[0]
+        else:
+            return self.var_float.bin_to_float(bin)
 
     # Inline refactorized from https://github.com/ilanschnell/bitarray/blob/master/bitarray/util.py
 
@@ -316,7 +243,7 @@ class FpdExtended(CompressionAlgorithm):
 
     def bytes_to_double(self, bin, offset = None):
         bin = bin[self.offset:self.offset + self.FLOAT_SIZE]
-        val = self.bin2float(bin)
+        val = self.bin_to_double(bin)
         self.offset += self.FLOAT_SIZE
         return val
 
