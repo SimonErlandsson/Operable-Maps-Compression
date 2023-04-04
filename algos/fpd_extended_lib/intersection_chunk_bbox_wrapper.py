@@ -18,8 +18,8 @@ def is_intersecting(self, args):
     l_bin, r_bin = args
     s = time.perf_counter()
 
-    _, l_geo = self.ALG.decompress(l_bin)
-    _, r_geo = self.ALG.decompress(r_bin)
+    _, l_geo = self.decompress(l_bin)
+    _, r_geo = self.decompress(r_bin)
     res = shapely.intersects(l_geo, r_geo)
 
     t = time.perf_counter()
@@ -29,8 +29,8 @@ def is_intersecting(self, args):
 def intersection(self, args):
     l_bin, r_bin = args
     s = time.perf_counter()
-    _, l_geo = self.ALG.decompress(l_bin)
-    _, r_geo = self.ALG.decompress(r_bin)
+    _, l_geo = self.decompress(l_bin)
+    _, r_geo = self.decompress(r_bin)
     res = shapely.intersection(l_geo, r_geo)
     t = time.perf_counter()
 

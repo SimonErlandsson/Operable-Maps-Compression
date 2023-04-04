@@ -2,6 +2,8 @@ import time
 from shapely import GeometryType as GT
 import bisect
 from bitarray import bitarray
+from algos.fpd_extended_lib.functions import *
+ 
 
 
 class AddVertex:
@@ -67,7 +69,7 @@ class AddVertex:
                 # Handle chunk tail
                 if deltas_right > 0 and p_idx != insert_idx:
                     # Get the absolute coordinate for first right coordinate
-                    rst_p, _ = self.funcs.access_vertex_chk(bin, deltas_in_chunk_offset, insert_idx - p_idx, delta_size)
+                    rst_p, _ = access_vertex_chk(self.ALG,bin, deltas_in_chunk_offset, insert_idx - p_idx, delta_size)
                     right = create_chunk(rst_p, deltas_right - 1)
                     # Append old tail, without the one extracted point
                     right.extend(bin[split + delta_size * 2:])

@@ -35,41 +35,77 @@ from var_float import VarFloat
 
 
 class FpdExtended(CompressionAlgorithm):
-    USE_DEFAULT_DOUBLE = True
-    FLOAT_SIZE = 64
+    USE_DEFAULT_DOUBLE = False
+    USE_DOUBLE_INTEGER = True
+
+    FLOAT_SIZE = 32
     EXPONENT = 6
     D_CNT_SIZE = 16
     POLY_RING_CNT_SIZE = 16
     RING_CHK_CNT_SIZE = 16
     MAX_NUM_DELTAS = 15  # Max number of deltas in a chunk before split
-    EOF_THRESHOLD = D_CNT_SIZE + 64 * 2  # Number of bits required to continue parsing
+    EOF_THRESHOLD = D_CNT_SIZE + FLOAT_SIZE * 2  # Number of bits required to continue parsing
 
     offset = 0  # Used when parsing
 # ---- HELPER METHODS
 
     var_float = VarFloat(EXPONENT, FLOAT_SIZE)
 
+    def double_as_float_int(self, num):
+        neg = False
+        num = str(num)
+        if "." not in num:
+            num = num + ".0"
+        [integral_part, decimal_part] = str(num).split(".")
+        if integral_part[0] == "-":
+            neg = True
+            integral_part = integral_part[1:]
+        if len(decimal_part) < 7:
+            decimal_part = decimal_part + str(0) * (7 - len(decimal_part))
+        res = int(integral_part + decimal_part)
+        return  self.zz_encode(res * (-1) if neg else res)
+    
+    def float_int_as_double(self, num):
+        neg = False
+        num = str(self.zz_decode(num))
+        if num[0] == "-":
+            neg = True
+            num = num[1:]
+        integral_part, decimal_part= num[:-7], num[-7:]
+        integral_part = str(integral_part).lstrip("0")
+        decimal_part = str(decimal_part).rstrip("0")
+        num = float(integral_part + "." + decimal_part)
+        return num * (-1) if neg else num
+    
     def double_as_long(self, num):
         if self.USE_DEFAULT_DOUBLE:
             return struct.unpack('!q', struct.pack('!d', num))[0]
+        elif self.USE_DOUBLE_INTEGER:
+            return self.double_as_float_int(num)
         else:
             return self.var_float.bits_to_long(self.var_float.float_to_bin(num))
 
     def long_as_double(self, num):
         if self.USE_DEFAULT_DOUBLE:
             return struct.unpack('!d', struct.pack('!q', num))[0]
+        elif self.USE_DOUBLE_INTEGER:
+            return self.float_int_as_double(num)
         else:
             return self.var_float.bin_to_float(self.var_float.long_to_bits(num))
         
     def double_to_bytes(self, x):
         if self.USE_DEFAULT_DOUBLE:
             return struct.pack("!d", x)
+        elif self.USE_DOUBLE_INTEGER:
+            return self.uint_to_ba(self.double_as_long(x),32)
         else:
             return self.var_float.float_to_bin(x)
     
     def bin_to_double(self, bin):
         if self.USE_DEFAULT_DOUBLE:
             return struct.unpack('!d', bin)[0]
+        elif self.USE_DOUBLE_INTEGER:
+            return self.long_as_double(util.ba2int(bin, signed=False))
         else:
             return self.var_float.bin_to_float(bin)
 
@@ -149,7 +185,7 @@ class FpdExtended(CompressionAlgorithm):
     def decode_header(self, bin, get_idxs=False):
         delta_size, type = struct.unpack_from('!BB', bin)
         type = GT(type)
-        self.offset += 2 * 8 + 4 * 64  # Offset is 2 bytes for BB + 64 * 4 for bounding box
+        self.offset += 2 * 8 + 4 * self.FLOAT_SIZE  # Offset is 2 bytes for BB + 64 * 4 for bounding box
 
         # Code segment needed for extracting sorted indexes
         # coord_count = self.bytes_to_uint(bin, 4 * 8)
@@ -425,8 +461,7 @@ def main():
     # print(x.access_vertex(bin4, 6, getBoundsData=True))
     t, bin = x.compress(geom1)
     t, geomx = x.decompress(bin)
-    print(x.bin2float(x.float2bin(-180.12223)))
-    
+    print(geomx)
 
 
 if __name__ == "__main__":
