@@ -13,6 +13,9 @@ from bitarray import bitarray, util, bits2bytes
 def append_intersection_header(self, bits, geometry):
     pass
 
+def decode_intersection_header(self, bits):
+    pass
+
 
 def is_intersecting(self, args):
     l_bin, r_bin = args

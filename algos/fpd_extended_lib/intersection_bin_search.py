@@ -18,6 +18,28 @@ class Intersection:
         self.func = Funcs(ALG)
 
 #----------HELPER METHODS------------
+    # append header
+    # coords = self.get_non_looping_coords(geometry)
+        # bits.extend(self.uint_to_ba(int(len(coords)), 4 * 8))  # size of integer
+        # sorted_idxs = [np.argsort([coord[0] for coord in coords]), np.argsort([coord[1] for coord in coords])]
+        # idx_bits = math.ceil(math.log2(len(coords)))
+        # for i in range(2):
+        #     for idx in range(len(coords)):
+        #         bits.extend(self.uint_to_ba(int(sorted_idxs[i][idx]), idx_bits))
+
+
+    # decode header
+        # Code segment needed for extracting sorted indexes
+        # coord_count = self.bytes_to_uint(bin, 4 * 8)
+        # idx_sizes = math.ceil(math.log2(coord_count))
+        # sorted_idxs = [[], []]
+        # if get_idxs:
+        #     for i in range(2):
+        #         for _ in range(coord_count):
+        #             sorted_idxs[i].append(self.bytes_to_uint(bin, idx_sizes))
+        #     return delta_size, type, sorted_idxs, coord_count
+        # else:
+        #     self.offset += idx_sizes * 2 * coord_count
 
     def get_bounds_intersect(self, bound_min1, bound_min2, bound_max1, bound_max2):
         if bound_min1 <= bound_min2 and bound_max1 <= bound_max2 and bound_max1 >= bound_min2:
