@@ -60,8 +60,9 @@ class FpdExtended(CompressionAlgorithm):
         if integral_part[0] == "-":
             neg = True
             integral_part = integral_part[1:]
-        if len(decimal_part) < 7:
-            decimal_part = decimal_part + str(0) * (7 - len(decimal_part))
+    
+        decimal_part = decimal_part[0:min(7, len(decimal_part))]
+        decimal_part = decimal_part+ str(0) * (7 - len(decimal_part))
         res = int(integral_part + decimal_part)
         return  self.zz_encode(res * (-1) if neg else res)
     
@@ -72,7 +73,7 @@ class FpdExtended(CompressionAlgorithm):
             neg = True
             num = num[1:]
         integral_part, decimal_part= num[:-7], num[-7:]
-        integral_part = str(integral_part).lstrip("0")
+        integral_part = str(integral_part)
         decimal_part = str(decimal_part).rstrip("0")
         num = float(integral_part + "." + decimal_part)
         return num * (-1) if neg else num
