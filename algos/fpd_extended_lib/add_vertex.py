@@ -6,7 +6,7 @@ from algos.fpd_extended_lib.cfg import *
 import algos.fpd_extended_lib.cfg
 from algos.fpd_extended_lib.low_level import *
 from algos.fpd_extended_lib.decompress import *
- 
+
 def add_vertex(self, args):
     def create_chunk(reset_point, delta_cnt=0):
         middle = bitarray(endian='big')
@@ -63,7 +63,7 @@ def add_vertex(self, args):
             # Handle chunk tail
             if deltas_right > 0 and p_idx != insert_idx:
                 # Get the absolute coordinate for first right coordinate
-                rst_p, _ = access_vertex_chk(bin, deltas_in_chunk_offset, insert_idx - p_idx, delta_size)
+                rst_p, _ = access_vertex_chk(bin, deltas_in_chunk_offset, delta_size, insert_idx - p_idx)
                 right = create_chunk(rst_p, deltas_right - 1)
                 # Append old tail, without the one extracted point
                 right.extend(bin[split + delta_size * 2:])

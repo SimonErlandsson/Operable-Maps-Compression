@@ -1,7 +1,7 @@
 import shapely
 import numpy as np
 from algos.alg_fpd_extended import FpdExtended
-from intersection.plotting import *
+from intersection.plotting import plot_chunks_bounds, plot_geometry, plot_intersecting_points
 
 fpd = FpdExtended()
 
@@ -35,23 +35,23 @@ def common_bbox(bins):  # Returns lower left corner, upper right corner in 1D ar
 
 
 # --------- METHODS REQUIRING IMPLEMENTATIONS IN FPDE ---------------
+# def slow_get_chunk(bin, idx, include_next=True):
+#     chunks, is_last_chunk_ring = fpd.get_chunks(bin)
+#     _, type = fpd.type(bin)
+#     vertices = chunks[idx]
+#     if not is_last_chunk_ring[idx] and type != 'LineString':
+#         vertices += [chunks[idx + 1][0]]
+#     return vertices
+
+#chunks_bounds, _ = calculate_chunks_bounds(bin)
+# --------- /END/ METHODS REQUIRING IMPLEMENTATIONS IN FPDE ---------------
 def get_chunks_idxs_within_bounds(bin, bbox):
-    #chunks_bounds, _ = calculate_chunks_bounds(bin)
     chunks_bounds = fpd.get_chunk_bounds(bin)
     chunks_idxs = [i for i in range(len(chunks_bounds)) if is_bbox_intersecting(bbox, chunks_bounds[i])]
     return chunks_idxs
 
+get_chunk = lambda bin, idx: fpd.get_chunk(bin, idx)[0] # Can also use slow above for debugging
 
-def get_chunk(bin, idx, include_next=True):
-    chunks, is_last_chunk_ring = fpd.get_chunks(bin)
-    _, type = fpd.type(bin)
-    vertices = chunks[idx]
-    if not is_last_chunk_ring[idx] and type != 'LineString':
-        vertices += [chunks[idx + 1][0]]
-    return vertices
-
-
-# --------- /END/ METHODS REQUIRING IMPLEMENTATIONS IN FPDE ---------------
 def chunk_to_shape(chk): return shapely.Point(chk[0]) if len(chk) == 1 else shapely.LineString(chk)
 
 
@@ -77,7 +77,7 @@ def is_contained_within(containee, container, debug_correct_ans, plot_all=False)
             intersecting_points += list(shapely.get_coordinates(i.intersection(ray)))
     # DEBUG
     if plot_all or debug_correct_ans != None and debug_correct_ans != (len(intersecting_points) % 2 == 1):
-        print(fpd.type(container), fpd.type(containee))
+        print(fpd.type(container)[1], fpd.type(containee)[1])
         plot_chunks_bounds(container, include_next_chunk_start=True, avoid_show=True)
         plot_chunks_bounds(containee, include_next_chunk_start=True, avoid_create_frame=True)
         plot_chunks_bounds(container, include_next_chunk_start=True, avoid_show=True, idxs=chks)
@@ -101,6 +101,7 @@ def has_line_intersection(bins, bbox, debug_correct_ans, plot_all=False):
         # Create list of segments for each chunk
         segments[i] = [chunk_to_shape(get_chunk(bins[i], c)) for c in chks[i]]
 
+
     for i in segments[0]:
         for j in segments[1]:
             if i.intersects(j):
@@ -117,7 +118,7 @@ def has_line_intersection(bins, bbox, debug_correct_ans, plot_all=False):
     return False
 
 
-def is_intersecting(bins, debug_correct_ans, plot_all=False):
+def is_intersecting(bins, debug_correct_ans=None, plot_all=False):
     bbox, overlap_type = common_bbox(bins)
     if bbox == None:
         return False

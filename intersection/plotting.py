@@ -82,7 +82,7 @@ def calculate_chunks_bounds(bin, include_next_chunk_start=True):
     chk_idx_ring_start = 0
     for idx, chunk in enumerate(chunks):
         xs, ys = [coord[0] for coord in chunk], [coord[1] for coord in chunk]
-        if not is_last_chunk_ring[idx] and type != 'LineString':
+        if not is_last_chunk_ring[idx] and type != 'LineString' and include_next_chunk_start:
             xs.append(chunks[idx + 1][0][0])
             ys.append(chunks[idx + 1][0][1])
         chunks_bounds.append([min(xs), min(ys), max(xs), max(ys)])

@@ -31,12 +31,13 @@ from bitarray import bitarray, util, bits2bytes
 
 class FpdExtended(CompressionAlgorithm):
 
-# ---- HELPER METHODS
+    # ---- HELPER METHODS
 
     # Export some helper functions
     get_chunks = lambda self, bin: get_chunks(bin)
-    access_vertex_chk = lambda self, bin, chk_offset, idx, delta_size, cache=None, offset_idx=0: access_vertex_chk(bin, chk_offset, idx, delta_size, cache, offset_idx)
+    access_vertex_chk = lambda self, bin, chk_offset, delta_size, idx, cache=None: access_vertex_chk(bin, chk_offset, delta_size, idx, cache)
     access_vertex = lambda self, bin, access_idx, cache=[]: access_vertex(bin, access_idx, cache)
+    get_chunk = lambda self, bin, access_idx, cache=[]: access_chunk(bin, access_idx, cache)
 
     # Intersection
     get_chunk_bounds = lambda self, bin: get_chunk_bounds(bin)
@@ -65,8 +66,8 @@ def main():
     from alg_fpd import Fpd
     x = FpdExtended()
 
-    #geom1 = shapely.wkt.loads('POLYGON ((-24.3 10.48, -19.32 12.44, -15.3 14.2, -15.3 13.78, -15.3 13.9, -15.06 10.4, -17.44 11.38, -19.18 11.46, -14.82 9.08, -12.9 10.14, -12.08 7.86, -14.36 5.94, -15.92 8.34, -16.86 3.48, -19.38 4.4, -18.2 6.52, -20.08 7.4, -24.34 6.68, -24.24 8.66, -27.52 11.1,  -27.0 11.1, -24.3 10.48))')
-    geom_fail = shapely.wkt.loads('POLYGON ((13.187793 55.6997015, 13.1877932 55.6996424, 13.1876195 55.6996422, 13.1876198 55.6995436, 13.1877927 55.6995437, 13.1877929 55.6994825, 13.1878191 55.6994825, 13.1878191 55.6994763, 13.1878354 55.6994662, 13.1878638 55.6994662, 13.1878807 55.6994745, 13.1878807 55.6994826, 13.1879074 55.6994826, 13.1879073 55.6995434, 13.1879395 55.6995435, 13.1879394 55.6995603, 13.1880448 55.6995604, 13.1880446 55.6996247, 13.1879386 55.6996246, 13.1879385 55.6996428, 13.1879077 55.6996428, 13.1879076 55.6997019, 13.1878832 55.6997019, 13.1878832 55.6997105, 13.1878663 55.6997203, 13.1878373 55.6997203, 13.1878204 55.6997091, 13.1878204 55.6997015, 13.187793 55.6997015))')
+    # geom1 = shapely.wkt.loads('POLYGON ((-24.3 10.48, -19.32 12.44, -15.3 14.2, -15.3 13.78, -15.3 13.9, -15.06 10.4, -17.44 11.38, -19.18 11.46, -14.82 9.08, -12.9 10.14, -12.08 7.86, -14.36 5.94, -15.92 8.34, -16.86 3.48, -19.38 4.4, -18.2 6.52, -20.08 7.4, -24.34 6.68, -24.24 8.66, -27.52 11.1,  -27.0 11.1, -24.3 10.48))')
+    geom_fail = shapely.wkt.loads('POLYGON ((0 0, 10 10, 20 0, 0 0))')
     geom1 = shapely.wkt.loads('LINESTRING (-24.3 10.48, -19.32 12.44, -15.3 14.2)')
     geom2 = shapely.wkt.loads('POLYGON ((-9.9 16.85, -5.95 17.67, -6.19 13.49, -9.81 12.74, -7.35 9.2, -6.82 6.19, -10 6, -12.36 5.75, -14.59 8.1, -12 10, -13.93 12.31, -17.35 12.45, -16.83 15.6, -20.45 14.6, -22.36 12, -22 9.37, -27.1 6.48, -30 11.7, -27.9 15.5, -21.46 17.26, -19.6 16.1, -14.77 17.6, -11.43 13.32, -9.9 16.85))')
 
@@ -83,13 +84,18 @@ def main():
     geom8 = shapely.wkt.loads('POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848861 55.705646, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1847300 55.705712, 13.1847425 55.7057123))')
 
     # print(shapely.get_coordinates(geom7))
-    #t, bin3 = x.compress(geom1)
-    #t, bin4 = x.compress(geom2)
+    # t, bin3 = x.compress(geom1)
+    # t, bin4 = x.compress(geom2)
 
     # print(x.access_vertex(bin4, 6, getBoundsData=True))
     t, bin = x.compress(geom_fail)
-    #t, geomx = x.decompress(bin)
     print(x.get_chunk_bounds(bin))
+    print(x.get_chunks(bin))
+    #print(x.get_chunk(bin, 0)[0])
+    print(x.get_chunk(bin, 1)[0])
+    #t, bin = x.add_vertex((bin, 1, (0.5, 0.2)))
+    t, geomx = x.decompress(bin)
+    print(geomx)
 
 
 if __name__ == "__main__":

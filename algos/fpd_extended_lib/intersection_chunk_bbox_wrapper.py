@@ -10,7 +10,6 @@ from shapely import GeometryType as GT
 from bitarray import bitarray, util, bits2bytes
 import algos.fpd_extended_lib.cfg as cfg
 from algos.fpd_extended_lib.low_level import *
-from algos.fpd_extended_lib.decompress import decode_header, decompress
 
 def intersection_reserve_header(bits):
     global chunk_bounds_offset
@@ -39,15 +38,14 @@ def get_chunk_bounds(bin_in):
     bounds = []
     for _ in range(chk_cnt):
         bounds.append([bytes_to_double(bin), bytes_to_double(bin), bytes_to_double(bin), bytes_to_double(bin)])
-    return bounds  
+    return bounds
 
 def is_intersecting(self, args):
+    from intersection.chunk_bbox_intersection import is_intersecting as intersects # Prevent circular import
     l_bin, r_bin = args
     s = time.perf_counter()
 
-    _, l_geo = self.decompress(l_bin)
-    _, r_geo = self.decompress(r_bin)
-    res = shapely.intersects(l_geo, r_geo)
+    res = intersects(args)
 
     t = time.perf_counter()
     return t - s, res
