@@ -41,7 +41,6 @@ def get_chunk_bounds(bin_in):
         bounds.append([bytes_to_double(bin), bytes_to_double(bin), bytes_to_double(bin), bytes_to_double(bin)])
     return bounds  
 
-
 def is_intersecting(self, args):
     l_bin, r_bin = args
     s = time.perf_counter()
