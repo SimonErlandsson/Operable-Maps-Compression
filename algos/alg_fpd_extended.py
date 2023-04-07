@@ -34,9 +34,12 @@ class FpdExtended(CompressionAlgorithm):
 # ---- HELPER METHODS
 
     # Export some helper functions
-    get_chunks = get_chunks
-    access_vertex_chk = access_vertex_chk
-    access_vertex = access_vertex
+    get_chunks = lambda self, bin: get_chunks(bin)
+    access_vertex_chk = lambda self, bin, chk_offset, idx, delta_size, cache=None, offset_idx=0: access_vertex_chk(bin, chk_offset, idx, delta_size, cache, offset_idx)
+    access_vertex = lambda self, bin, access_idx, cache=[]: access_vertex(bin, access_idx, cache)
+
+    # Intersection
+    get_chunk_bounds = lambda self, bin: get_chunk_bounds(bin)
 
 # ---- UNARY ---- #
     compress = compress
@@ -85,8 +88,8 @@ def main():
 
     # print(x.access_vertex(bin4, 6, getBoundsData=True))
     t, bin = x.compress(geom_fail)
-    t, geomx = x.decompress(bin)
-    print(geomx)
+    #t, geomx = x.decompress(bin)
+    print(x.get_chunk_bounds(bin))
 
 
 if __name__ == "__main__":

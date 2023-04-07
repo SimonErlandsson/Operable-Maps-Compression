@@ -10,8 +10,7 @@ from shapely import GeometryType as GT
 from bitarray import bitarray, util, bits2bytes
 import algos.fpd_extended_lib.cfg as cfg
 from algos.fpd_extended_lib.low_level import *
-
-CHK_CNT_SIZE = 16
+from algos.fpd_extended_lib.decompress import decode_header, decompress
 
 def intersection_reserve_header(bits):
     global chunk_bounds_offset
@@ -19,7 +18,7 @@ def intersection_reserve_header(bits):
 
 def intersection_append_header(bits, chunk_bboxes):
     left = bits[0:chunk_bounds_offset]
-    left.extend(uint_to_ba(len(chunk_bboxes), CHK_CNT_SIZE))
+    left.extend(uint_to_ba(len(chunk_bboxes), 32))
     for bbox in chunk_bboxes:
         for i in range(4):
             left.frombytes(double_to_bytes(bbox[i]))
@@ -27,10 +26,20 @@ def intersection_append_header(bits, chunk_bboxes):
     left.extend(right)
     return left
 
-
 def intersection_skip_header(bin):
-    chk_cnt = bytes_to_uint(bin, CHK_CNT_SIZE)
-    cfg.offset += 4 * FLOAT_SIZE * chk_cnt
+    chk_cnt = struct.unpack_from('!I', bin, offset=cfg.offset//8)[0]
+    cfg.offset += 32 + 4 * FLOAT_SIZE * chk_cnt
+
+def get_chunk_bounds(bin_in):
+    cfg.offset = 2 * 8 + 4 * FLOAT_SIZE # Skip normal header
+    chk_cnt = struct.unpack_from('!I', bin_in, offset=cfg.offset//8)[0]
+    bin = bitarray(endian='big')
+    bin.frombytes(bin_in)
+    cfg.offset += 32
+    bounds = []
+    for _ in range(chk_cnt):
+        bounds.append([bytes_to_double(bin), bytes_to_double(bin), bytes_to_double(bin), bytes_to_double(bin)])
+    return bounds  
 
 
 def is_intersecting(self, args):

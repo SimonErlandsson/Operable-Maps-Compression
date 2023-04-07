@@ -36,7 +36,8 @@ def common_bbox(bins):  # Returns lower left corner, upper right corner in 1D ar
 
 # --------- METHODS REQUIRING IMPLEMENTATIONS IN FPDE ---------------
 def get_chunks_idxs_within_bounds(bin, bbox):
-    chunks_bounds, _ = calculate_chunks_bounds(bin)
+    #chunks_bounds, _ = calculate_chunks_bounds(bin)
+    chunks_bounds = fpd.get_chunk_bounds(bin)
     chunks_idxs = [i for i in range(len(chunks_bounds)) if is_bbox_intersecting(bbox, chunks_bounds[i])]
     return chunks_idxs
 
