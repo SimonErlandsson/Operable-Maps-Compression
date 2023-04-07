@@ -5,8 +5,8 @@ import struct
 from algos.fpd_extended_lib.low_level import *
 import algos.fpd_extended_lib.cfg as cfg
 from algos.fpd_extended_lib.cfg import *
-
 from shapely import GeometryType as GT
+from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import *
 
 
 # Structural things (per type):
@@ -44,8 +44,7 @@ def decode_header(bin):
     delta_size, type = struct.unpack_from('!BB', bin)
     type = GT(type)
     cfg.offset += 2 * 8 + 4 * FLOAT_SIZE  # Offset is 2 bytes for BB + 64 * 4 for bounding box
-    #cfg.offset += 2 * 8  # Offset is 2 bytes for BB + 64 * 4 for bounding box
-    #decode_intersection_header(bin)
+    intersection_skip_header(bin)
 
     return delta_size, type
 
