@@ -5,10 +5,10 @@ from algos.fpd_extended_lib.low_level import *
 from algos.fpd_extended_lib.decompress import *
 
 
-def get_chunks(bin_in):
+def get_chunks(bin_in, include_ring_start=True):
     """
     Only used for non-timed operations, i.e. debugging/testing implementations
-    # NOTE: Also returns the first ring coordinate when reaching end of ring!
+    # NOTE: Can also return the first ring coordinate when reaching end of ring!
     """
     chunks = []
     cfg.offset = 0
@@ -51,7 +51,8 @@ def get_chunks(bin_in):
         is_last_ring_chunk.append(False)
         chunks_in_ring_left -= 1
         if chunks_in_ring_left == 0:
-            chunks[-1].append([x_ring, y_ring])
+            if include_ring_start:
+                chunks[-1].append([x_ring, y_ring])
             rings_left -= 1
             is_last_ring_chunk[-1] = True
     return chunks, is_last_ring_chunk

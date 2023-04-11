@@ -8,7 +8,6 @@ def read_dataset(DATASET_PATH = "data/lund_building_highway.json"):
     #DATASET_PATH = "data/world.json"
     NBR_ITER = 16000
 
-
     SEED = 123 # If we want to enforce the same ordering and indexes for multiple runs, else None
     random.seed(SEED) # Init random
 
