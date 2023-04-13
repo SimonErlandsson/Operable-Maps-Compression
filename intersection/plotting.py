@@ -24,6 +24,12 @@ def bbox_coords(geom):
     x_l, y_b, x_r, y_t = shapely.bounds(geom)
     return [(x_l, y_b), (x_l, y_t), (x_r, y_t), (x_r, y_b), (x_l, y_b)]
 
+def bounds_to_coords(bounds):
+    x_l, y_b, x_r, y_t = bounds
+    x_bounds = [x_l, x_r, x_r, x_l, x_l]
+    y_bounds = [y_t, y_t, y_b, y_b, y_t]
+    return x_bounds, y_bounds
+
 
 def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True):
     if SHOW_GEOMETRIES:
@@ -48,6 +54,12 @@ def plot_geometry_bbox(geom, SHOW_BOUNDING_BOXES=True, solid=False):
     bbox = bbox_coords(geom)
     if SHOW_BOUNDING_BOXES:
         plt.plot(xs(bbox), ys(bbox), '-' if solid else '--', color=color(geom), zorder=-10)
+
+def plot_bounds(bounds, solid=False, color=None, zorder=20, alpha=1.0):
+    if color == None:
+        color = (np.random.random(), np.random.random(), np.random.random())
+    x_coords, y_coords = bounds_to_coords(bounds)
+    plt.plot(x_coords, y_coords, '-' if solid else '--', color=color, zorder=zorder, alpha=alpha)
 
 
 def plot_common_bbox(geometries, SHOW_COMMON_BOUNDING_BOX=True):
@@ -89,13 +101,15 @@ def calculate_chunks_bounds(bin, include_next_chunk_start=True):
         chunks_vertices.append((xs, ys))
     return chunks_bounds, chunks_vertices
 
+def create_canvas():
+    fig = plt.figure()
+    zoom = 2.5
+    w, h = fig.get_size_inches()
+    fig.set_size_inches(w * zoom, h * zoom)
 
-def plot_chunks_bounds(bin_in, include_next_chunk_start=False, avoid_create_frame=False, avoid_show=False, idxs=None, txt=''):
+def plot_chunks_bounds(bin_in, include_next_chunk_start=False, avoid_create_frame=False, avoid_show=False, idxs=None, txt='', solid=True):
     if not avoid_create_frame:
-        fig = plt.figure()
-        zoom = 2.5
-        w, h = fig.get_size_inches()
-        fig.set_size_inches(w * zoom, h * zoom)
+        create_canvas()
 
     chunks_bounds, chunks_vertices = calculate_chunks_bounds(bin_in, include_next_chunk_start)
     if idxs != None:
@@ -106,12 +120,10 @@ def plot_chunks_bounds(bin_in, include_next_chunk_start=False, avoid_create_fram
     for chunk_data in [(chunks_bounds[i], chunks_vertices[i]) for i in range(len(chunks_bounds))]:
         chunk_bounds, chunk_vertices = chunk_data
         xs, ys = chunk_vertices
-        x_l, y_b, x_r, y_t = chunk_bounds
-        x_bounds = [x_l, x_r, x_r, x_l, x_l]
-        y_bounds = [y_t, y_t, y_b, y_b, y_t]
+        x_bounds, y_bounds = bounds_to_coords(chunk_bounds)
         chunk_color = (np.random.random(), np.random.random(), np.random.random())
         inverse_chunk_color = (1 - chunk_color[0], 1 - chunk_color[1], 1 - chunk_color[2])
-        plt.plot(x_bounds, y_bounds, color=chunk_color)
+        plot_bounds(chunk_bounds, color=chunk_color, solid=solid)
         plt.fill(x_bounds, y_bounds, color=chunk_color, alpha=0.05)
         plt.scatter(xs, ys, s=10, color=inverse_chunk_color)
 
