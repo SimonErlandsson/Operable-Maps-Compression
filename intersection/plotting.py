@@ -31,23 +31,29 @@ def bounds_to_coords(bounds):
     return x_bounds, y_bounds
 
 
-def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True):
+def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True, alpha=1.0):
     if SHOW_GEOMETRIES:
         geom_type = shapely.get_type_id(geom)
         rings = []
         if geom_type == GT.LINESTRING or geom_type == GT.POINT:
             pts = shapely.get_coordinates(geom)
-            rings = [pts]
+            rings = [(False, pts)]
         else:
             shps = [geom] if shapely.get_type_id(geom) == GT.POLYGON else geom.geoms
             for shp in shps:
-                exterior_coords = list(shp.exterior.coords)
-                interior_coords = [list(interior.coords) for interior in shp.interiors]
-                rings += [ring for ring in ([exterior_coords] + interior_coords)]
+                shp_type = shapely.get_type_id(shp)
+                if shp_type == GT.LINESTRING or shp_type == GT.POINT:
+                    pts = shapely.get_coordinates(geom)
+                    rings += [(False, pts)]
+                else:
+                    exterior_coords = list(shp.exterior.coords)
+                    interior_coords = [list(interior.coords) for interior in shp.interiors]
+                    rings += [(True, ring) for ring in ([exterior_coords] + interior_coords)]
 
-        for ring_points in rings:
-            plt.fill(xs(ring_points), ys(ring_points), color=color(geom), alpha=0.1)
-            plt.plot(xs(ring_points), ys(ring_points), '-' if solid else '--', color=color(geom))
+        for ring_solid, ring_points in rings:
+            if ring_solid and solid:
+                plt.fill(xs(ring_points), ys(ring_points), color=color(geom), alpha=(0.1 * alpha))
+            plt.plot(xs(ring_points), ys(ring_points), '-' if solid else '--', color=color(geom), alpha=alpha)
 
 
 def plot_geometry_bbox(geom, SHOW_BOUNDING_BOXES=True, solid=False):
