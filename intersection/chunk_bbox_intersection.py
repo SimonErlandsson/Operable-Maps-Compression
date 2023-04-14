@@ -89,11 +89,10 @@ def is_contained_within(containee, container, debug_correct_ans, plot_all=False)
     # END DEBUG
     return len(intersecting_points) % 2 == 1
 
+
 # Based on the common bbox, extracts the chunks for both geometries within the bbox,
 # and performs intersection testing between the line segments.
-
-
-def has_line_intersection(bins, bbox, debug_correct_ans, plot_all=False):
+def line_intersection(bins, bbox, debug_correct_ans, intersection_list=None, plot_all=False):
     chks = [[], []]
     segments = [[], []]
     for i in range(2):
@@ -114,7 +113,9 @@ def has_line_intersection(bins, bbox, debug_correct_ans, plot_all=False):
                     plot_chunks_bounds(bins[0], include_next_chunk_start=True, avoid_show=True, idxs=chks[0])
                     plot_chunks_bounds(bins[1], include_next_chunk_start=True, avoid_create_frame=True, idxs=chks[1], txt=f" : was {len(intersecting_points) > 0} expected {debug_correct_ans}")
                 # END ----------------------
-                return True
+                if intersection_list == None:
+                    return True
+                intersection_list += intersecting_points
     return False
 
 
@@ -126,7 +127,7 @@ def is_intersecting(bins, debug_correct_ans=None, plot_all=False):
     # Bounding boxes intersect. Assume no intersection, ensure that no intersection is in fact occuring:
     # 1. Find all chunks which are inside the common bounding box
     #    Construct LineStrings and check for intersections
-    if has_line_intersection(bins, bbox, debug_correct_ans, plot_all):
+    if line_intersection(bins, bbox, debug_correct_ans, plot_all=plot_all):
         return True
 
     # 2. Ensure that the polygon is not fully contained
@@ -138,3 +139,31 @@ def is_intersecting(bins, debug_correct_ans=None, plot_all=False):
     elif overlap_type == '2 in 1':
         return is_contained_within(bins[1], bins[0], debug_correct_ans, plot_all)
     return False
+
+def intersection(bins, debug_correct_ans=None, plot_all=False):
+    bbox, overlap_type = common_bbox(bins)
+    if bbox == None:
+        return shapely.Polygon(None)
+
+    # Bounding boxes intersect. Assume no intersection, ensure that no intersection is in fact occuring:
+    # 1. Find all chunks which are inside the common bounding box
+    #    Construct LineStrings and check for intersections
+    intersecting_points = []
+    line_intersection(bins, bbox, debug_correct_ans, intersecting_points, plot_all)
+    print("inter", intersecting_points)
+
+    # 2. Ensure that the polygon is not fully contained
+    #    Send ray and verify that it hits other polygon zero or even amount of times
+    #    - Possibly pick point closest to other polygon's bounding box
+    if len(intersecting_points) == 0:
+        if overlap_type == '1 in 2' and is_contained_within(bins[0], bins[1], debug_correct_ans, plot_all):
+            return fpd.decompress(bins[0])[1]
+        elif overlap_type == '2 in 1' and is_contained_within(bins[1], bins[0], debug_correct_ans, plot_all):
+            return fpd.decompress(bins[1])[1]
+        return shapely.Polygon(None)
+    
+    # Have intersecting points, construct resulting polygon
+    # 1. Create set of intersection points, mapping: intersection point <-> line segments
+    # 2. Take random intersection point from set, follow path inside both shapes
+    # 3. Continue until encountering intersection point or already visited point
+    return []
