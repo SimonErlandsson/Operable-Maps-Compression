@@ -47,6 +47,7 @@ def vertices(self, bin_in):
             chunks_in_ring = chunks_in_ring_left
 
         # Go through chunk (inlined sequence decode)
+        cfg.offset += D_CNT_SIZE
         deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
         # Extract reset point
         x = bytes_to_double(bin)

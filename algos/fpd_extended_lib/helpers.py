@@ -1,8 +1,10 @@
+import math
 from bitarray import bitarray, util
 from shapely import GeometryType as GT
 from algos.fpd_extended_lib.cfg import *
 from algos.fpd_extended_lib.low_level import *
 from algos.fpd_extended_lib.decompress import *
+
 
 
 def get_chunks(bin_in, include_ring_start=True):
@@ -34,6 +36,7 @@ def get_chunks(bin_in, include_ring_start=True):
             chunks_in_ring = chunks_in_ring_left
 
         # Go through chunk (inlined sequence decode)
+        cfg.offset += D_CNT_SIZE #skip chk bytes size
         deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
         # Extract reset point
         x = bytes_to_double(bin)
@@ -94,7 +97,9 @@ def random_access(bin_in, idx, cache, get_chunk=False):
             chunks_in_ring_left = bytes_to_uint(bin, RING_CHK_CNT_SIZE)
             ring_start_offset = cfg.offset
         deltas_in_chunk_offset = cfg.offset
+        deltas_bytes_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
         deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
+
 
         if get_chunk and cur_idx == idx:
             # Looking for whole chunk, found it
@@ -107,7 +112,7 @@ def random_access(bin_in, idx, cache, get_chunk=False):
                     next_chk_offset = ring_start_offset
                 else:
                     # Append next chunk start
-                    next_chk_offset = cfg.offset + 64 * 2 + delta_size * 2 * deltas_in_chunk
+                    next_chk_offset = cfg.offset + FLOAT_SIZE * 2 + deltas_bytes_in_chunk
                 next_vert, cache = access_vertex_chk(bin, next_chk_offset, delta_size, 0, cache)
                 chk.append(next_vert)
             cfg.offset = old_offset
@@ -120,14 +125,14 @@ def random_access(bin_in, idx, cache, get_chunk=False):
 
         # Jump to next chunk
         cur_idx += 1 + (deltas_in_chunk if not get_chunk else 0)
-        cfg.offset += 64 * 2 + delta_size * 2 * deltas_in_chunk
+        cfg.offset += 64 * 2 + deltas_bytes_in_chunk
         chunks_in_ring_left -= 1
         if (chunks_in_ring_left == 0):
             rings_left -= 1
     raise Exception("Out of bounds!")
 
 
-def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_vertices=False):
+def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_vertices=False, get_delta_offsets = False):
     """
     Can be used if the chunk location in bin is already known, and a vertex within the chunk is needed.
     Supply the offset to D_CNT, and idx is the index within the chunk
@@ -136,6 +141,7 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
     """
     old_offset = cfg.offset
     cfg.offset = chk_offset
+    cfg.offset += D_CNT_SIZE
     deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
     if idx == None:
         idx = deltas_in_chunk
@@ -145,10 +151,54 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
     if list_vertices:
         vertices = [(x, y)]
     # Loop through deltas in chunk
+    delta_offsets = []
     for idx in range(idx):
+        delta_offsets.append(cfg.offset)
         x = bytes_to_decoded_coord(bin, x, delta_size)
         y = bytes_to_decoded_coord(bin, y, delta_size)
         if list_vertices:
             vertices.append((x, y))
+    delta_offsets.append(cfg.offset)
+
     cfg.offset = old_offset
+    if get_delta_offsets:
+        return ((x, y) if not list_vertices else vertices), cache, delta_offsets
+    
     return ((x, y) if not list_vertices else vertices), cache
+
+def calculate_delta_size(geometry, return_deltas=False):
+    deltas = [[], []]
+    RESET_POINT_SIZE = FLOAT_SIZE * 2 + D_CNT_SIZE
+    coords = shapely.get_coordinates(geometry)
+    prev = [0, 0]
+    bit_cnts = {}
+    for coord in coords:
+        bit_cnt = 0
+        for i in range(2):
+            d = get_zz_encoded_delta(prev[i], coord[i])
+            d_bit_cnt = 1 if d == 0 else math.ceil(math.log2(d))
+            bit_cnt = max(bit_cnt, d_bit_cnt)
+            if return_deltas:
+                deltas[0].append(coord[i] - prev[i])
+                deltas[1].append(d)
+
+        if bit_cnt not in bit_cnts:
+            bit_cnts[bit_cnt] = 1
+        else:
+            bit_cnts[bit_cnt] += 1
+        prev = coord
+    bit_cnts = dict(sorted(bit_cnts.items(), reverse=True))
+
+    tot_size = {}
+    upper_cnt = 0
+    lower_cnt = len(coords)
+    for n in bit_cnts.keys():
+        tot_size[n] = n * lower_cnt * 2 + RESET_POINT_SIZE * upper_cnt
+        lower_cnt -= bit_cnts[n]
+        upper_cnt += bit_cnts[n]
+
+    return min(tot_size, key=tot_size.get), bit_cnts, deltas
+
+def get_zz_encoded_delta(prev_coord, curr_coord):
+    return zz_encode(double_as_long(curr_coord) - double_as_long(prev_coord))
+
