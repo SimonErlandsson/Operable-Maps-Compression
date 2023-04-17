@@ -11,6 +11,7 @@ from shapely import GeometryType as GT
 
 # Structural things (per type):
 def sequence_decoder(bin, seq_list, delta_size):
+    cfg.offset += D_CNT_SIZE
     chk_size = bytes_to_uint(bin, D_CNT_SIZE)
     # Extract reset point
     x = bytes_to_double(bin)

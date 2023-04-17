@@ -6,6 +6,8 @@ import time
 from shapely import GeometryType as GT
 from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import *
 from algos.fpd_extended_lib.low_level import *
+from algos.fpd_extended_lib.helpers import calculate_delta_size, get_zz_encoded_delta
+from algos.fpd_extended_lib.entropy_coder import encode
 
 def get_zz_encoded_delta(prev_coord, curr_coord):
     return zz_encode(double_as_long(curr_coord) - double_as_long(prev_coord))
@@ -51,8 +53,13 @@ def append_header(bits, geometry, d_size):
 def append_delta_pair(bits, d_x_zig, d_y_zig, d_size):
         x_bytes = uint_to_ba(d_x_zig, d_size)
         y_bytes = uint_to_ba(d_y_zig, d_size)
+        if USE_ENTROPY:
+            x_bytes, len_x = encode(x_bytes, d_size)
+            y_bytes, len_y = encode(y_bytes, d_size)
         bits.extend(x_bytes)
         bits.extend(y_bytes)
+        return (d_size, d_size) if not USE_ENTROPY else (len_x, len_y)
+
 
 def fp_delta_encoding(geometry, d_size):
     # List of resulting bytes.
@@ -72,6 +79,7 @@ def fp_delta_encoding(geometry, d_size):
 
     prev_x, prev_y = 0, 0  # Absolute value of previous coord
     chk_deltas = 0  # Cnt of 'deltas in chunk'
+    chk_deltas_bytes = 0  # Cnt of 'deltas in chunk'
     chk_deltas_idx = 0  # Pointer to 'deltas of chunk'
     num_chks_ring = 0  # Cnt of 'number of chunks for current ring'
     num_chks_ring_idx = 0  # Pointer to latest 'number of chunks for ring'
@@ -100,10 +108,10 @@ def fp_delta_encoding(geometry, d_size):
         if chk_deltas_idx == 0 or not deltas_fit_in_bits(d_x_zig, d_y_zig, d_size) or rem_points_ring == 0 or chk_deltas == MAX_NUM_DELTAS:
             # If not 'first chunk' -> save previous chunk's size
             if chk_deltas_idx != 0:
-                bits[chk_deltas_idx:chk_deltas_idx + D_CNT_SIZE] = uint_to_ba(chk_deltas, D_CNT_SIZE)
-
+                bits[chk_deltas_idx:chk_deltas_idx + D_CNT_SIZE] = uint_to_ba(chk_deltas_bytes, D_CNT_SIZE)
+                bits[chk_deltas_idx + D_CNT_SIZE :chk_deltas_idx + D_CNT_SIZE * 2] = uint_to_ba(chk_deltas, D_CNT_SIZE)
             ###### ---- INITIALIZE NEW CHUNK ----- ######
-            chk_deltas = 0
+            chk_deltas, chk_deltas_bytes = 0, 0
             intersection_chunk_bboxes.append([x, y, x, y])
 
             ### __ RING/MULTI-POLYGON META-DATA __ ###
@@ -127,22 +135,26 @@ def fp_delta_encoding(geometry, d_size):
 
             # Preparing chunk size (number of deltas)
             chk_deltas_idx = len(bits)
-            bits.extend(uint_to_ba(0, D_CNT_SIZE))  # Reserve space for size
+            bits.extend(uint_to_ba(0, D_CNT_SIZE * 2))  # Reserve space for size
 
             # Add full coordinates
             bits.frombytes(double_to_bytes(x))
             bits.frombytes(double_to_bytes(y))
         else:
             # Delta fits, append it
-            append_delta_pair(bits, d_x_zig, d_y_zig, d_size)
+            (len_x, len_y) = append_delta_pair(bits, d_x_zig, d_y_zig, d_size)
             chk_deltas += 1
+            chk_deltas_bytes += len_x + len_y
+
             intersection_add_point(x, y)
 
         # Coord has been processed, remove it
         rem_points_ring -= 1
 
     # All points processed. Update size of final chunk
-    bits[chk_deltas_idx:chk_deltas_idx + D_CNT_SIZE] = uint_to_ba(chk_deltas, D_CNT_SIZE)
+
+    bits[chk_deltas_idx:chk_deltas_idx + D_CNT_SIZE] = uint_to_ba(chk_deltas_bytes, D_CNT_SIZE)
+    bits[chk_deltas_idx + D_CNT_SIZE :chk_deltas_idx + D_CNT_SIZE * 2] = uint_to_ba(chk_deltas, D_CNT_SIZE)    
     bits = intersection_append_header(bits, intersection_chunk_bboxes)
 
     # util.pprint(bits)
