@@ -123,7 +123,7 @@ def random_access(bin_in, idx, cache, get_chunk=False):
 
         # Jump to next chunk
         cur_idx += 1 + (deltas_in_chunk if not get_chunk else 0)
-        cfg.offset += FLOAT_SIZE * 2 + delta_size * 2 * deltas_in_chunk
+        cfg.offset += FLOAT_SIZE * 2 + deltas_bytes_in_chunk
         chunks_in_ring_left -= 1
         if (chunks_in_ring_left == 0):
             rings_left -= 1
