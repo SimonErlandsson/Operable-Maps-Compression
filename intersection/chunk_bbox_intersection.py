@@ -92,9 +92,8 @@ def is_contained_within(containee, container, debug_correct_ans, plot_all=False)
     return len(intersecting_points) % 2 == 1
 
 def is_point_on_segment(seg_pt_1, seg_pt_2, pt):
-    print(seg_pt_1, pt)
-    print(np.linalg.norm(seg_pt_1, pt))
-    return np.linalg.norm(seg_pt_1, pt) + np.linalg.norm(seg_pt_2, pt) == np.linalg.norm(seg_pt_1, seg_pt_2)
+    seg_pt_1, seg_pt_2, pt = (np.array(seg_pt_1), np.array(seg_pt_2), np.array(pt))
+    return np.linalg.norm(seg_pt_1 - pt) + np.linalg.norm(seg_pt_2 - pt) == np.linalg.norm(seg_pt_1 - seg_pt_2)
 
 # Based on the common bbox, extracts the chunks for both geometries within the bbox,
 # and performs intersection testing between the line segments.
@@ -135,6 +134,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
         for c_i in range(len(chks[i])):
             # Is last point in current chunk equal to first point in next chunk?
             if chks[i][c_i][-1] == chks[i][(c_i + 1) % len(chks[i])][0]:
+                #segments[i] += 
                 vertices[i] += chks[i][c_i][:-1]
             else:
                 vertices[i] += chks[i][c_i]
@@ -143,7 +143,8 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
         for v_i in range(len(vertices[i]) - 1):
             for p in intersecting_points:
                 if is_point_on_segment(vertices[i][v_i], vertices[i][v_i + 1], p):
-                    vertices.insert(v_i + 1, p)
+                    plot_geometry(shapely.LineString([vertices[i][v_i], vertices[i][v_i + 1]]))
+                    #vertices.insert(v_i + 1, p)
 
     res_list.append(vertices)
 
