@@ -84,6 +84,16 @@ def plot_intersecting_points(pts, SHOW_INTERSECTING_POINTS=True):
     if SHOW_INTERSECTING_POINTS:
         plt.scatter(xs(pts), ys(pts), 22, zorder=10)
 
+def plot_raw_points(pts, color='blue', size=22, alpha=1.0):
+    plt.scatter(xs(pts), ys(pts), size, color=color, zorder=20, alpha=alpha)
+
+def plot_raw_point(pt, color='blue', size=22, alpha=1.0):
+    plt.scatter(pt[0], pt[1], size, color=color, zorder=20, alpha=alpha)
+
+def plot_line(pt_1, pt_2, color='blue', solid=True, alpha=1.0):
+    coords = [pt_1, pt_2]
+    plt.plot(xs(coords), ys(coords), '-' if solid else '--', color=color, alpha=alpha)
+
 
 # FPDE related stuff
 from algos.alg_fpd_extended import FpdExtended
