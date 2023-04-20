@@ -9,6 +9,7 @@ from algos.fpd_extended_lib.helpers import calculate_delta_size
 from algos.fpd_extended_lib.cfg import *
 import algos.fpd_extended_lib.cfg as cfg
 
+
 def set_entropy_code(path):
     df, unary_idxs = bench_utils.read_dataset(path)
     deltas_by_bits = defaultdict(list)
@@ -40,7 +41,12 @@ def encode(msg, delta_len):
 
 #decode also defined in low level (circular import)
 def decode(msg, delta_len):
-    return decode_msg(msg, delta_len)              
+    for i in range(1, len(msg) + 100):
+        try:
+            value = msg[:i].decode(cfg.DECODE_TREES[delta_len])[0]
+            return bitarray(value), len(msg[:i])
+        except:
+            pass               
     
 def __get_bit_seq_freqs(deltas):
     freq_by_bits = defaultdict(dict)
