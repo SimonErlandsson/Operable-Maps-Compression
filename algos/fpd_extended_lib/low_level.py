@@ -16,7 +16,9 @@ def zz_decode(num):
 def double_as_float_int(num):
     neg = False
     num = str(num)
-    #num = format(num, '.80f')
+    if "e" in num:
+        num = format(float(num), '.7f')
+        num = str(num)
     if "." not in num:
         num = num + ".0"
     [integral_part, decimal_part] = str(num).split(".")
@@ -25,13 +27,15 @@ def double_as_float_int(num):
         integral_part = integral_part[1:]
 
     decimal_part = decimal_part[0:min(7, len(decimal_part))]
-    decimal_part = decimal_part+ str(0) * (7 - len(decimal_part))
+    decimal_part = decimal_part + str(0) * (7 - len(decimal_part))
     res = int(integral_part + decimal_part)
     return  zz_encode(res * (-1) if neg else res)
 
 def float_int_as_double(num):
     neg = False
     num = str(zz_decode(num))
+    if num == 0:
+        return 0.0
     if num[0] == "-":
         neg = True
         num = num[1:]

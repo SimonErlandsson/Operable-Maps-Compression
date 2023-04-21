@@ -65,7 +65,6 @@ def get_chunks(bin_in, include_ring_start=True):
 def access_vertex(bin_in, idx, cache=[]):
     return random_access(bin_in, idx, cache, get_chunk=False)
 
-
 def access_chunk(bin_in, idx, cache=[]):
     """
     Get a chunk based on chunk index. Note that
@@ -165,42 +164,8 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
     
     return ((x, y) if not list_vertices else vertices), cache
 
-# def calculate_delta_size(geometry, return_deltas=False):
-#     deltas = [[], []]
-#     RESET_POINT_SIZE = FLOAT_SIZE * 2 + D_CNT_SIZE
-#     coords = shapely.get_coordinates(geometry)
-#     prev = [0, 0]
-#     bit_cnts = {}
-#     for coord in coords:
-#         bit_cnt = 0
-#         for i in range(2):
-#             d = get_zz_encoded_delta(prev[i], coord[i])
-#             d_bit_cnt = 1 if d == 0 else math.ceil(math.log2(d))
-#             bit_cnt = max(bit_cnt, d_bit_cnt)
-#             if return_deltas:
-#                 deltas[0].append(coord[i] - prev[i])
-#                 deltas[1].append(d)
-
-#         if bit_cnt not in bit_cnts:
-#             bit_cnts[bit_cnt] = 1
-#         else:
-#             bit_cnts[bit_cnt] += 1
-#         prev = coord
-#     bit_cnts = dict(sorted(bit_cnts.items(), reverse=True))
-
-    tot_size = {}
-    upper_cnt = 0
-    lower_cnt = len(coords)
-    for n in bit_cnts.keys():
-        tot_size[n] = n * lower_cnt * 2 + RESET_POINT_SIZE * upper_cnt
-        lower_cnt -= bit_cnts[n]
-        upper_cnt += bit_cnts[n]
-
-    return min(tot_size, key=tot_size.get), bit_cnts, deltas
-
 def get_zz_encoded_delta(prev_coord, curr_coord):
     return zz_encode(double_as_long(curr_coord) - double_as_long(prev_coord))
-
 
 def compress_chunk(bits, chk_hdr_offset, delta_bytes_size):
     chk_coord_offset = chk_hdr_offset + D_CNT_SIZE * 2
@@ -246,12 +211,12 @@ def k_est(deltas):
 
 def get_entropy_metadata(deltas, delta_size):
     deltas = [d for d in deltas if (d == 0 or math.log2(d) <= delta_size)]
-    if ENTROPY_METHOD == "Golomb":
+    if not USE_ENTROPY:
+        return 0
+    elif ENTROPY_METHOD == "Golomb":
         return k_est(deltas)
     elif ENTROPY_METHOD == "Huffman":
         return 255
-    else:
-        return 0
     
 def decode_entropy_param(value, delta_size):
     if value == 0:
