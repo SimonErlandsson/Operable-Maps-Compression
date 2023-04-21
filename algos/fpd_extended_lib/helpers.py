@@ -165,28 +165,28 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
     
     return ((x, y) if not list_vertices else vertices), cache
 
-def calculate_delta_size(geometry, return_deltas=False):
-    deltas = [[], []]
-    RESET_POINT_SIZE = FLOAT_SIZE * 2 + D_CNT_SIZE
-    coords = shapely.get_coordinates(geometry)
-    prev = [0, 0]
-    bit_cnts = {}
-    for coord in coords:
-        bit_cnt = 0
-        for i in range(2):
-            d = get_zz_encoded_delta(prev[i], coord[i])
-            d_bit_cnt = 1 if d == 0 else math.ceil(math.log2(d))
-            bit_cnt = max(bit_cnt, d_bit_cnt)
-            if return_deltas:
-                deltas[0].append(coord[i] - prev[i])
-                deltas[1].append(d)
+# def calculate_delta_size(geometry, return_deltas=False):
+#     deltas = [[], []]
+#     RESET_POINT_SIZE = FLOAT_SIZE * 2 + D_CNT_SIZE
+#     coords = shapely.get_coordinates(geometry)
+#     prev = [0, 0]
+#     bit_cnts = {}
+#     for coord in coords:
+#         bit_cnt = 0
+#         for i in range(2):
+#             d = get_zz_encoded_delta(prev[i], coord[i])
+#             d_bit_cnt = 1 if d == 0 else math.ceil(math.log2(d))
+#             bit_cnt = max(bit_cnt, d_bit_cnt)
+#             if return_deltas:
+#                 deltas[0].append(coord[i] - prev[i])
+#                 deltas[1].append(d)
 
-        if bit_cnt not in bit_cnts:
-            bit_cnts[bit_cnt] = 1
-        else:
-            bit_cnts[bit_cnt] += 1
-        prev = coord
-    bit_cnts = dict(sorted(bit_cnts.items(), reverse=True))
+#         if bit_cnt not in bit_cnts:
+#             bit_cnts[bit_cnt] = 1
+#         else:
+#             bit_cnts[bit_cnt] += 1
+#         prev = coord
+#     bit_cnts = dict(sorted(bit_cnts.items(), reverse=True))
 
     tot_size = {}
     upper_cnt = 0
@@ -237,3 +237,30 @@ def decompress_chunk(bits, chk_coord_offset, coords_bytes_size):
     before_bits += after_bits
     cfg.binary_length = len(before_bits)
     return before_bits, len(decompressed_bits)
+
+
+def k_est(deltas):
+    delta_mean = sum(deltas) / len(deltas)
+    golden_ratio = (math.sqrt(5) + 1) / 2
+    return 1 + math.floor(math.log2(math.log(golden_ratio - 1) / math.log(delta_mean /(delta_mean + 1))))
+
+def get_entropy_metadata(deltas, delta_size):
+    deltas = [d for d in deltas if (d == 0 or math.log2(d) <= delta_size)]
+    if ENTROPY_METHOD == "Golomb":
+        return k_est(deltas)
+    elif ENTROPY_METHOD == "Huffman":
+        return 255
+    else:
+        return 0
+    
+def decode_entropy_param(value, delta_size):
+    if value == 0:
+        cfg.USE_ENTROPY = False
+    elif value == 255:
+        cfg.USE_ENTROPY = True
+        cfg.ENTROPY_METHOD = "Huffman"
+        cfg.ENTROPY_PARAM = delta_size
+    else:
+        cfg.USE_ENTROPY = True
+        cfg.ENTROPY_METHOD = "Golomb"
+        cfg.ENTROPY_PARAM = value

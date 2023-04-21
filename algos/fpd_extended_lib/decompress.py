@@ -13,11 +13,11 @@ from shapely import GeometryType as GT
 def sequence_decoder(bin, seq_list, delta_size):
     delta_bytes_size = bytes_to_uint(bin, D_CNT_SIZE)
     chk_size = bytes_to_uint(bin, D_CNT_SIZE)
-
     if COMPRESS_CHUNK:
         chk_coord_offset = cfg.offset
         bin, coord_bit_len = algos.fpd_extended_lib.helpers.decompress_chunk(bin, chk_coord_offset, delta_bytes_size)
         offset = cfg.offset
+   
     # Extract reset point
     x = bytes_to_double(bin)
     y = bytes_to_double(bin)
@@ -27,8 +27,10 @@ def sequence_decoder(bin, seq_list, delta_size):
         x = bytes_to_decoded_coord(bin, x, delta_size)
         y = bytes_to_decoded_coord(bin, y, delta_size)
         seq_list.append((x, y))
+
     if COMPRESS_CHUNK:
         cfg.offset += coord_bit_len - (cfg.offset - offset)
+    
     return bin
 
 def ring_decoder(bin, polygon_list, delta_size):
@@ -52,11 +54,14 @@ def polygon_decoder(bin, multipolygon_coords, delta_size):
     multipolygon_coords.append(shapely.Polygon(shell=polygon_coords[0], holes=polygon_coords[1:]))
     return bin
 
+
 def decode_header(bin):
     delta_size, type = struct.unpack_from('!BB', bin)
     type = GT(type)
-    cfg.offset += 2 * 8 + 4 * FLOAT_SIZE  # Offset is 2 bytes for BB + 64 * 4 for bounding box
+    #algos.fpd_extended_lib.helpers.decode_entropy_param(entropy_param, delta_size)
+    cfg.offset += 2 * 8 + 4 * FLOAT_SIZE  # Offset is 2 bytes for BBB + FLOAT_SIZE * 4 for bounding box
     algos.fpd_extended_lib.intersection_chunk_bbox_wrapper.intersection_skip_header(bin) # Circular import
+
 
     return delta_size, type
 

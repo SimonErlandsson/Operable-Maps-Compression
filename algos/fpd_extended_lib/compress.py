@@ -6,7 +6,7 @@ import time
 from shapely import GeometryType as GT
 from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import *
 from algos.fpd_extended_lib.low_level import *
-from algos.fpd_extended_lib.helpers import calculate_delta_size, get_zz_encoded_delta, compress_chunk
+from algos.fpd_extended_lib.helpers import get_zz_encoded_delta, compress_chunk, get_entropy_metadata
 from algos.fpd_extended_lib.entropy_coder import encode
 
 def get_zz_encoded_delta(prev_coord, curr_coord):
@@ -37,10 +37,13 @@ def point_count(geometry):
             ring_count.append(poly_ring_count)
     return ring_count
 
-def append_header(bits, geometry, d_size):
+def append_header(bits, geometry, d_size, deltas):
+    #entropy_metadata = get_entropy_metadata(deltas, d_size)
     # Meta data
     bits.frombytes(uchar_to_bytes(d_size))
     bits.frombytes(uchar_to_bytes(int(shapely.get_type_id(geometry))))  # 1 byte is enough for storing type
+    #bits.frombytes(uchar_to_bytes(entropy_metadata))
+   #cfg.ENTROPY_PARAM = entropy_metadata
     # Bounding Box
     bounds = shapely.bounds(geometry)
     bits.frombytes(double_to_bytes(bounds[0]))
@@ -61,11 +64,11 @@ def append_delta_pair(bits, d_x_zig, d_y_zig, d_size):
         return (d_size, d_size) if not USE_ENTROPY else (len_x, len_y)
 
 
-def fp_delta_encoding(geometry, d_size):
+def fp_delta_encoding(geometry, d_size, deltas):
     # List of resulting bytes.
     bits = bitarray(endian='big')
     # Init with 'd_size', 'geom_type'
-    append_header(bits, geometry, d_size)
+    append_header(bits, geometry, d_size, deltas)
 
     # Type specific variables
     geo_type = shapely.get_type_id(geometry)
@@ -203,7 +206,7 @@ def calculate_delta_size(geometry, return_deltas=False):
 
 def compress(self, geometry):
     s = time.perf_counter()
-    optimal_size, _, _ = calculate_delta_size(geometry)
-    bin = fp_delta_encoding(geometry, optimal_size)
+    optimal_size, _, deltas = calculate_delta_size(geometry, True)
+    bin = fp_delta_encoding(geometry, optimal_size, deltas[1])
     t = time.perf_counter()
     return t - s, bin

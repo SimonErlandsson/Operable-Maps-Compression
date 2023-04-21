@@ -52,8 +52,9 @@ def bin_to_double(bin):
         return var_float.bin_to_float(bin)
 
 def bytes_to_decoded_coord(bin, prev_coord, input_size=64):
+    from algos.fpd_extended_lib.entropy_coder import decode
     if USE_ENTROPY:
-        bin , input_size  = decode_msg(bin[cfg.offset:], input_size)
+        bin , input_size  =  decode(bin[cfg.offset:], input_size)
     else: 
         bin = bin[cfg.offset: cfg.offset + input_size]
 
@@ -115,11 +116,3 @@ def uint_to_ba(x, length):
 
 def uchar_to_bytes(x):
     return x.to_bytes(1, 'big')
-
-def decode_msg(msg, delta_len):
-    for i in range(1, len(msg) + 100):
-        try:
-            value = msg[:i].decode(cfg.DECODE_TREES[delta_len])[0]
-            return bitarray(value), len(msg[:i])
-        except:
-            pass  

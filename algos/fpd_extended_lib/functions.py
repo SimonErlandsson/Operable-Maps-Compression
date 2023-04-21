@@ -90,6 +90,6 @@ def bounding_box(self, bin):
     bounds = []
     res = bitarray()
     res.frombytes(bin)
-    bounds = [bin_to_double(res[2 * 8 + FLOAT_SIZE * i: 2 * 8 + FLOAT_SIZE * (i + 1)]) for i in range(4)]
+    bounds = [bin_to_double(res[3 * 8 + FLOAT_SIZE * i: 3 * 8 + FLOAT_SIZE * (i + 1)]) for i in range(4)]
     t = time.perf_counter()
     return t - s, bounds
