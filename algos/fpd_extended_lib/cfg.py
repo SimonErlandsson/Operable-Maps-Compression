@@ -2,7 +2,7 @@ USE_DEFAULT_DOUBLE = False
 USE_DOUBLE_INTEGER = True
 
 ENTROPY_METHOD = "Golomb" #Golomb or Huffman
-USE_ENTROPY = True
+USE_ENTROPY = False
 ENTROPY_PARAM = None
 CODES, DECODE_TREES = None, None
 

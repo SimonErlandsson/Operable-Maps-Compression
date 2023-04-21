@@ -38,12 +38,12 @@ def point_count(geometry):
     return ring_count
 
 def append_header(bits, geometry, d_size, deltas):
-    #entropy_metadata = get_entropy_metadata(deltas, d_size)
+    entropy_metadata = get_entropy_metadata(deltas, d_size)
     # Meta data
     bits.frombytes(uchar_to_bytes(d_size))
     bits.frombytes(uchar_to_bytes(int(shapely.get_type_id(geometry))))  # 1 byte is enough for storing type
-    #bits.frombytes(uchar_to_bytes(entropy_metadata))
-   #cfg.ENTROPY_PARAM = entropy_metadata
+    bits.frombytes(uchar_to_bytes(entropy_metadata))
+    cfg.ENTROPY_PARAM = entropy_metadata
     # Bounding Box
     bounds = shapely.bounds(geometry)
     bits.frombytes(double_to_bytes(bounds[0]))

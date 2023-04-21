@@ -12,18 +12,18 @@ import algos.fpd_extended_lib.cfg as cfg
 def set_entropy_code(path):
     from algos.fpd_extended_lib.compress import calculate_delta_size
     from algos.fpd_extended_lib.helpers import k_est
-
-    total_deltas = []
-    df, unary_idxs = bench_utils.read_dataset(path)
-    deltas_by_bits = defaultdict(list)
-    for idx in unary_idxs: # List of single idxs
-        opt_size, _, delta_list = calculate_delta_size(shape(df.iloc[idx]), True)
-        for delta in delta_list[1]:
-            #If coordinate not delta_encoded
-            if delta != 0 and math.log2(delta) > opt_size:
-                continue
-            total_deltas.append(delta)
-            deltas_by_bits[opt_size].append(uint_to_ba(delta, opt_size).to01())
+    if ENTROPY_METHOD == "Huffman":
+        total_deltas = []
+        df, unary_idxs = bench_utils.read_dataset(path)
+        deltas_by_bits = defaultdict(list)
+        for idx in unary_idxs: # List of single idxs
+            opt_size, _, delta_list = calculate_delta_size(shape(df.iloc[idx]), True)
+            for delta in delta_list[1]:
+                #If coordinate not delta_encoded
+                if delta != 0 and math.log2(delta) > opt_size:
+                    continue
+                total_deltas.append(delta)
+                deltas_by_bits[opt_size].append(uint_to_ba(delta, opt_size).to01())
         
     if ENTROPY_METHOD == "Huffman":
         delta_freqs = __get_bit_seq_freqs(deltas_by_bits)
@@ -35,9 +35,9 @@ def set_entropy_code(path):
         cfg.CODES = codes
         cfg.DECODE_TREES = decode_trees
 
-    if ENTROPY_METHOD == "Golomb":
-        cfg.ENTROPY_PARAM = k_est(total_deltas)
-        print(cfg.ENTROPY_PARAM)
+    # if ENTROPY_METHOD == "Golomb":
+    #     cfg.ENTROPY_PARAM = k_est(total_deltas)
+    #     print(cfg.ENTROPY_PARAM)
 
 
 def __get_entropy_codes(frequency_list):

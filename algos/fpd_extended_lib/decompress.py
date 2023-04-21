@@ -56,10 +56,10 @@ def polygon_decoder(bin, multipolygon_coords, delta_size):
 
 
 def decode_header(bin):
-    delta_size, type = struct.unpack_from('!BB', bin)
+    delta_size, type, entropy_param = struct.unpack_from('!BBB', bin)
     type = GT(type)
-    #algos.fpd_extended_lib.helpers.decode_entropy_param(entropy_param, delta_size)
-    cfg.offset += 2 * 8 + 4 * FLOAT_SIZE  # Offset is 2 bytes for BBB + FLOAT_SIZE * 4 for bounding box
+    algos.fpd_extended_lib.helpers.decode_entropy_param(entropy_param, delta_size)
+    cfg.offset += 3 * 8 + 4 * FLOAT_SIZE  # Offset is 2 bytes for BBB + FLOAT_SIZE * 4 for bounding box
     algos.fpd_extended_lib.intersection_chunk_bbox_wrapper.intersection_skip_header(bin) # Circular import
 
 
