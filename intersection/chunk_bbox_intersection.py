@@ -1,3 +1,4 @@
+from collections import defaultdict
 import shapely
 import numpy as np
 from algos.alg_fpd_extended import FpdExtended
@@ -91,9 +92,9 @@ def is_contained_within(containee, container, debug_correct_ans, plot_all=False)
     # END DEBUG
     return len(intersecting_points) % 2 == 1
 
-def is_point_on_segment(seg_pt_1, seg_pt_2, pt):
-    seg_pt_1, seg_pt_2, pt = (np.array(seg_pt_1), np.array(seg_pt_2), np.array(pt))
-    return np.linalg.norm(seg_pt_1 - pt) + np.linalg.norm(seg_pt_2 - pt) == np.linalg.norm(seg_pt_1 - seg_pt_2)
+def is_point_on_segment(seg, pt):
+    seg_pt_1, seg_pt_2, pt = (np.array(seg[0]), np.array(seg[1]), np.array(pt))
+    return abs(np.linalg.norm(seg_pt_1 - pt) + np.linalg.norm(seg_pt_2 - pt) - np.linalg.norm(seg_pt_1 - seg_pt_2)) < 1e-15
 
 # Based on the common bbox, extracts the chunks for both geometries within the bbox,
 # and performs intersection testing between the line segments.
@@ -129,25 +130,27 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
 
     ## Append to res_list
     res_list.append(intersecting_points)
-    vertices = [[], []]
-    for i in range(2):
-        for c_i in range(len(chks[i])):
-            # Is last point in current chunk equal to first point in next chunk?
-            if chks[i][c_i][-1] == chks[i][(c_i + 1) % len(chks[i])][0]:
-                #segments[i] += 
-                vertices[i] += chks[i][c_i][:-1]
-            else:
-                vertices[i] += chks[i][c_i]
+    segments = [[], []]
+    seg_to_cross = [defaultdict(list), defaultdict(list)]
+    cross_to_seg = [[[], []] for _ in range(len(intersecting_points))]
+    for s in range(2):
+        segments[s] = [[c[i], c[i+1]] for c in chks[s] for i in range(len(c) - 1)]
+
 
         # Fix check restart
-        for v_i in range(len(vertices[i]) - 1):
-            for p in intersecting_points:
-                if is_point_on_segment(vertices[i][v_i], vertices[i][v_i + 1], p):
-                    plot_geometry(shapely.LineString([vertices[i][v_i], vertices[i][v_i + 1]]))
-                    #vertices.insert(v_i + 1, p)
-
-    res_list.append(vertices)
-
+        for seg_idx, seg in enumerate(segments[s]):
+            for p_idx, p in enumerate(intersecting_points):
+                #plot_intersecting_points([p])
+                if is_point_on_segment(seg, p):
+                    #plot_geometry(shapely.LineString(seg))
+                    seg_to_cross[s][seg_idx].append(p)
+                    cross_to_seg[p_idx][s].append(seg_idx)
+                # else:
+                #     plot_geometry(shapely.LineString(seg), solid=False)
+            seg_to_cross[s][seg_idx].sort(key=lambda x: x[0])
+    res_list.append(segments)
+    res_list.append(seg_to_cross)
+    res_list.append(cross_to_seg)
 
 
 def is_intersecting(bins, debug_correct_ans=None, plot_all=False):
@@ -196,6 +199,12 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
     # 1. Create set of intersection points, mapping: intersection point <-> line segments
     # 2. Take random intersection point from set, follow path inside both shapes
     # 3. Continue until encountering intersection point or already visited point
+    intersecting_points, segments, seg_to_cross, cross_to_seg = line_data
+    cross_left = set(range(len(intersecting_points)))
+    while len(cross_left) > 0:
+        c_i = cross_left.pop()
+        print(c_i)
+
     create_canvas()
     plot_intersecting_points(line_data[0])
     plot_intersecting_points(line_data[1][0])
