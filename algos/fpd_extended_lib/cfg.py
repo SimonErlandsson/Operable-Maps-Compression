@@ -8,7 +8,7 @@ CODES, DECODE_TREES = None, None
 
 FLOAT_SIZE = 64
 EXPONENT = 6
-D_CNT_SIZE = 10
+D_CNT_SIZE = 16
 POLY_RING_CNT_SIZE = 16
 RING_CHK_CNT_SIZE = 16
 MAX_NUM_DELTAS = 100  # Max number of deltas in a chunk before split
