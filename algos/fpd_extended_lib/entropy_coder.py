@@ -11,7 +11,6 @@ import algos.fpd_extended_lib.cfg as cfg
 
 def set_entropy_code(path):
     from algos.fpd_extended_lib.compress import calculate_delta_size
-    from algos.fpd_extended_lib.helpers import k_est
     if ENTROPY_METHOD == "Huffman":
         total_deltas = []
         df, unary_idxs = bench_utils.read_dataset(path)
@@ -58,23 +57,7 @@ def decode(msg, delta_len):
         return golomb_decode(msg, delta_len)            
     
 
-def golomb_encode(msg):
-    value = util.ba2int(msg)
-    M = int(math.pow(2,cfg.ENTROPY_PARAM))
-    r = uint_to_ba(value & int(M - 1),cfg.ENTROPY_PARAM)
-    q = __unary_encode(value >> cfg.ENTROPY_PARAM)
-    return q + r, len(r + q)
-
-def golomb_decode(msg, delta_len):
-    M = math.pow(2,cfg.ENTROPY_PARAM) 
-    q = 0
-    while(msg[q] == 1):
-        q += 1
-    r = msg[q + 1:q + 1 + cfg.ENTROPY_PARAM]
-    r = util.ba2int(r) # + 1 for the ending 0
-    res =  q * M + r
-    return uint_to_ba(int(res), delta_len), q + 1 + cfg.ENTROPY_PARAM
-
+#Huffman Encoding
 
 def huffman_decode(msg, delta_len):
     for i in range(1, len(msg) + 100):
@@ -88,9 +71,6 @@ def huffman_encode(msg, delta_len):
     value = cfg.CODES[delta_len][msg.to01()]
     return value, len(value)
 
-def __unary_encode(value):
-    return bitarray("1" * value + "0")
-
 def __get_bit_seq_freqs(deltas):
     freq_by_bits = defaultdict(dict)
     for opt_size in deltas: 
@@ -101,3 +81,75 @@ def __get_bit_seq_freqs(deltas):
             else:
                 freq_by_bits[delta_len][delta] = 1
     return freq_by_bits
+
+#Golomb-Rise Encoding
+
+def golomb_encode(msg):
+    value = util.ba2int(msg)
+    M = int(math.pow(2,cfg.ENTROPY_PARAM))
+    r = uint_to_ba(value & int(M - 1),cfg.ENTROPY_PARAM)
+    q = __unary_encode(value >> cfg.ENTROPY_PARAM)
+    res = q + r
+    return res, len(res)
+
+def golomb_decode(msg, delta_len):
+    M = math.pow(2,cfg.ENTROPY_PARAM) 
+    q = 0
+    while(msg[q] == 1):
+        q += 1
+    r = msg[q + 1:q + 1 + cfg.ENTROPY_PARAM]
+    r = util.ba2int(r) # + 1 for the ending 0
+    res =  q * M + r
+    return uint_to_ba(int(res), delta_len), q + 1 + cfg.ENTROPY_PARAM
+
+def __unary_encode(value):
+    return bitarray("1" * value + "0")
+
+
+def check_optimal_parameter(deltas):
+    max_value = math.inf
+    best_param = 0
+    for i in range(1, 25):
+        cfg.ENTROPY_PARAM = i
+        tot_sum = 0
+        for d in deltas:
+            tot_sum += len(golomb_encode(d)[0])
+        if tot_sum < max_value:
+            best_param = i
+            max_value = tot_sum
+        tot_sum = 0
+    return best_param
+
+
+def k_est(deltas, delta_size):
+    if cfg.GOLOMB_MIN_BRUTEFORCE:
+        return check_optimal_parameter([uint_to_ba(d, delta_size) for d in deltas])
+    else:
+        delta_mean = sum(deltas) / len(deltas)
+        golden_ratio = (math.sqrt(5) + 1) / 2
+        return 1 + math.floor(math.log2(math.log(golden_ratio - 1) / math.log(delta_mean /(delta_mean + 1))))
+
+
+def get_entropy_metadata(deltas, delta_size):
+    deltas = [d for d in deltas if (d == 0 or math.log2(d) <= delta_size)]
+    if not USE_ENTROPY:
+        return 0
+    elif ENTROPY_METHOD == "Golomb":
+        return k_est(deltas, delta_size)
+    elif ENTROPY_METHOD == "Huffman":
+        return 255
+    
+def decode_entropy_param(value, delta_size):
+    if value == 0:
+        cfg.USE_ENTROPY = False
+    elif value == 255:
+        cfg.USE_ENTROPY = True
+        cfg.ENTROPY_METHOD = "Huffman"
+        cfg.ENTROPY_PARAM = delta_size
+    else:
+        cfg.USE_ENTROPY = True
+        cfg.ENTROPY_METHOD = "Golomb"
+        cfg.ENTROPY_PARAM = value
+            
+
+

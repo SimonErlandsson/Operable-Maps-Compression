@@ -202,30 +202,3 @@ def decompress_chunk(bits, chk_coord_offset, coords_bytes_size):
     before_bits += after_bits
     cfg.binary_length = len(before_bits)
     return before_bits, len(decompressed_bits)
-
-
-def k_est(deltas):
-    delta_mean = sum(deltas) / len(deltas)
-    golden_ratio = (math.sqrt(5) + 1) / 2
-    return 1 + math.floor(math.log2(math.log(golden_ratio - 1) / math.log(delta_mean /(delta_mean + 1))))
-
-def get_entropy_metadata(deltas, delta_size):
-    deltas = [d for d in deltas if (d == 0 or math.log2(d) <= delta_size)]
-    if not USE_ENTROPY:
-        return 0
-    elif ENTROPY_METHOD == "Golomb":
-        return k_est(deltas)
-    elif ENTROPY_METHOD == "Huffman":
-        return 255
-    
-def decode_entropy_param(value, delta_size):
-    if value == 0:
-        cfg.USE_ENTROPY = False
-    elif value == 255:
-        cfg.USE_ENTROPY = True
-        cfg.ENTROPY_METHOD = "Huffman"
-        cfg.ENTROPY_PARAM = delta_size
-    else:
-        cfg.USE_ENTROPY = True
-        cfg.ENTROPY_METHOD = "Golomb"
-        cfg.ENTROPY_PARAM = value

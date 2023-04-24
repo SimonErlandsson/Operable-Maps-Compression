@@ -6,8 +6,8 @@ import time
 from shapely import GeometryType as GT
 from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import *
 from algos.fpd_extended_lib.low_level import *
-from algos.fpd_extended_lib.helpers import get_zz_encoded_delta, compress_chunk, get_entropy_metadata
-from algos.fpd_extended_lib.entropy_coder import encode
+from algos.fpd_extended_lib.helpers import get_zz_encoded_delta, compress_chunk
+from algos.fpd_extended_lib.entropy_coder import encode, get_entropy_metadata
 
 def get_zz_encoded_delta(prev_coord, curr_coord):
     return zz_encode(double_as_long(curr_coord) - double_as_long(prev_coord))
@@ -201,8 +201,8 @@ def calculate_delta_size(geometry, return_deltas=False):
         tot_size[n] = n * lower_cnt * 2 + RESET_POINT_SIZE * upper_cnt
         lower_cnt -= bit_cnts[n]
         upper_cnt += bit_cnts[n]
-
-    return min(tot_size, key=tot_size.get), bit_cnts, deltas
+    optimal_delta_size = min(tot_size, key=tot_size.get)
+    return optimal_delta_size, bit_cnts, deltas
 
 def compress(self, geometry):
     s = time.perf_counter()
