@@ -58,12 +58,18 @@ get_chunk = lambda bin, idx: fpd.get_chunk(bin, idx)[0] # Can also use slow abov
 def chunk_to_shape(chk): return shapely.Point(chk[0]) if len(chk) == 1 else shapely.LineString(chk)
 
 
-def is_contained_within(containee, container, debug_correct_ans, plot_all=False):
+def is_contained_within(containee, container, debug_correct_ans=None, plot_all=False):
+    '''
+    Containee is either FPDE binary object or a tuple of coordinates.
+    '''
     if fpd.type(container)[1] == 'LineString':
         return False
 
     # Origin
-    x, y = fpd.access_vertex(containee, 0)[0]
+    if type(containee) == bytes:
+        x, y = fpd.access_vertex(containee, 0)[0]
+    else:
+        x, y = containee
     # Outher bounding box
     x_l, y_b, x_r, y_t = fpd.bounding_box(container)[1]
     distances = [(x_l - x, 0), (0, y_b - y), (x_r - x, 0), (0, y_t - y)]
@@ -136,7 +142,6 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
     for s in range(2):
         segments[s] = [[c[i], c[i+1]] for c in chks[s] for i in range(len(c) - 1)]
 
-
         # Fix check restart
         for seg_idx, seg in enumerate(segments[s]):
             for p_idx, p in enumerate(intersecting_points):
@@ -147,7 +152,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
                     cross_to_seg[p_idx][s].append(seg_idx)
                 # else:
                 #     plot_geometry(shapely.LineString(seg), solid=False)
-            seg_to_cross[s][seg_idx].sort(key=lambda x: x[0])
+            seg_to_cross[s][seg_idx].sort(key=lambda x: x) # TODO: Sort on distance to p_0
     res_list.append(segments)
     res_list.append(seg_to_cross)
     res_list.append(cross_to_seg)
@@ -200,20 +205,69 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
     # 2. Take random intersection point from set, follow path inside both shapes
     # 3. Continue until encountering intersection point or already visited point
 
+    def seg_to_point(s, seg_idx, v_idx):
+        if v_idx > 1:
+            return intersecting_points[seg_to_cross[s][seg_idx][v_idx - 2]]
+        else:
+            return segments[s][seg_idx][v_idx]
+        
+    def seg_to_middle_point(s, seg_idx, v_idxs):
+        l = seg_to_point(s, seg_idx, v_idxs[0])
+        r = seg_to_point(s, seg_idx, v_idxs[1])
+        return [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2]
+
+
     # Returns the next unvisited shapes inside both shapes connected to c_i
-    def next_point(segments, seg_to_cross, cross_to_seg, c_i):
-        seg_idxs = cross_to_seg[c_i][s]
+    def possible_paths(c_i):
+        possible_paths = []
+        seg_idxs = cross_to_seg[c_i]
+        for s in range(2):
+            for seg_idx in seg_idxs[s]:
+                seg_cross_cnt = len(seg_to_cross[s][seg_idx])
+                # Get possible successor points
+                # Where is the current cross?
+                c_i_in_seg = seg_to_cross[s][seg_idx].index(c_i)
+
+                # Get previous cross point if exists
+                start_v = c_i_in_seg + 1 if c_i_in_seg != 0 else 0 # V:0 left of segment, V:1 right in segment, V:2+ intersection points
+                possible_paths.append((s, seg_idx, (c_i_in_seg, start_v), 1)) # Vertex 2 being the first cross, 0 is first in traversal order
+                
+                end_v = c_i_in_seg + 3 if c_i_in_seg != seg_cross_cnt - 1 else 1
+                possible_paths.append((s, seg_idx, (c_i_in_seg, end_v), -1)) # Vertex 2 being the first cross, 0 is first in traversal order
+
+        print(possible_paths, c_i)
+        possible_paths = list(filter(lambda p: is_contained_within(seg_to_middle_point(*p[0:3]), bins[(p[0] + 1) % 2]), possible_paths))
+        print(possible_paths)
+        return possible_paths
+    
+                    
 
     intersecting_points, segments, seg_to_cross, cross_to_seg = line_data
     cross_left = set(range(len(intersecting_points)))
+    res_segs = []
     while len(cross_left) > 0:
         c_i = cross_left.pop()
-        for segs in cross_to_seg[c_i]:
-            next_point = segs
+        paths = possible_paths(c_i)
+        while len(paths) > 0:
+            path = paths.pop()
+            shp_idx, seg_idx, v_idxs, seg_dir = path
+            # V_idxs contains: start_idx, end_index. I.e. the direction to traverse.
+            while True: # While no cross point
+                res_segs.append([seg_to_point(shp_idx, seg_idx, v_idxs[0]), seg_to_point(shp_idx, seg_idx, v_idxs[1])]) # Add segment to resulting shape
+                seg_idx = (seg_idx + seg_dir) % len(segments[shp_idx])
+                seg_cross_cnt = len(seg_to_cross[shp_idx][seg_idx])
+                if seg_cross_cnt > 0:
+                    if seg_dir == 1:
+                        res_segs.append([seg_to_point(shp_idx, seg_idx, 0), seg_to_point(shp_idx, seg_idx, 2)])
+                    else:
+                        res_segs.append([seg_to_point(shp_idx, seg_idx, 1), seg_to_point(shp_idx, seg_idx, seg_cross_cnt + 1)])
+                    break
+
 
     create_canvas()
     plot_intersecting_points(line_data[0])
     plot_intersecting_points(line_data[1][0])
     plot_intersecting_points(line_data[1][1])
     plt.show()
-    return line_data
+    print("RES", res_segs)
+    return res_segs
