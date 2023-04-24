@@ -143,7 +143,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
                 #plot_intersecting_points([p])
                 if is_point_on_segment(seg, p):
                     #plot_geometry(shapely.LineString(seg))
-                    seg_to_cross[s][seg_idx].append(p)
+                    seg_to_cross[s][seg_idx].append(p_idx)
                     cross_to_seg[p_idx][s].append(seg_idx)
                 # else:
                 #     plot_geometry(shapely.LineString(seg), solid=False)
@@ -199,11 +199,17 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
     # 1. Create set of intersection points, mapping: intersection point <-> line segments
     # 2. Take random intersection point from set, follow path inside both shapes
     # 3. Continue until encountering intersection point or already visited point
+
+    # Returns the next unvisited shapes inside both shapes connected to c_i
+    def next_point(segments, seg_to_cross, cross_to_seg, c_i):
+        seg_idxs = cross_to_seg[c_i][s]
+
     intersecting_points, segments, seg_to_cross, cross_to_seg = line_data
     cross_left = set(range(len(intersecting_points)))
     while len(cross_left) > 0:
         c_i = cross_left.pop()
-        print(c_i)
+        for segs in cross_to_seg[c_i]:
+            next_point = segs
 
     create_canvas()
     plot_intersecting_points(line_data[0])
