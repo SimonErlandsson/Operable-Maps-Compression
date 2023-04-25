@@ -1,8 +1,9 @@
 USE_DEFAULT_DOUBLE = False
 USE_DOUBLE_INTEGER = True
 
-USE_ENTROPY = False
-ENTROPY_METHOD = "Golomb" #Golomb or Huffman
+USE_ENTROPY = True
+AUTO_SELECT_METHOD, ENTROPY_STATE = True, (None, None, None)
+ENTROPY_METHOD = "Huffman" #Golomb or Huffman
 ENTROPY_PARAM = None
 CODES, DECODE_TREES = None, None
 GOLOMB_MIN_BRUTEFORCE = False

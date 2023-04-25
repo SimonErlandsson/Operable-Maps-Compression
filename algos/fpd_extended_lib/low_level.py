@@ -57,7 +57,7 @@ def bin_to_double(bin):
 
 def bytes_to_decoded_coord(bin, prev_coord, input_size=64):
     from algos.fpd_extended_lib.entropy_coder import decode
-    if USE_ENTROPY:
+    if cfg.USE_ENTROPY:
         bin , input_size  =  decode(bin[cfg.offset:], input_size)
     else: 
         bin = bin[cfg.offset: cfg.offset + input_size]

@@ -202,3 +202,4 @@ def decompress_chunk(bits, chk_coord_offset, coords_bytes_size):
     before_bits += after_bits
     cfg.binary_length = len(before_bits)
     return before_bits, len(decompressed_bits)
+

@@ -38,12 +38,11 @@ def point_count(geometry):
     return ring_count
 
 def append_header(bits, geometry, d_size, deltas):
-    entropy_metadata = get_entropy_metadata(deltas, d_size)
+    (cfg.ENTROPY_METHOD, cfg.USE_ENTROPY,cfg.ENTROPY_PARAM) = get_entropy_metadata(deltas, d_size)
     # Meta data
     bits.frombytes(uchar_to_bytes(d_size))
     bits.frombytes(uchar_to_bytes(int(shapely.get_type_id(geometry))))  # 1 byte is enough for storing type
-    bits.frombytes(uchar_to_bytes(entropy_metadata))
-    cfg.ENTROPY_PARAM = entropy_metadata
+    bits.frombytes(uchar_to_bytes(cfg.ENTROPY_PARAM))
     # Bounding Box
     bounds = shapely.bounds(geometry)
     bits.frombytes(double_to_bytes(bounds[0]))
@@ -56,15 +55,16 @@ def append_header(bits, geometry, d_size, deltas):
 def append_delta_pair(bits, d_x_zig, d_y_zig, d_size):
         x_bytes = uint_to_ba(d_x_zig, d_size)
         y_bytes = uint_to_ba(d_y_zig, d_size)
-        if USE_ENTROPY:
+        if cfg.USE_ENTROPY:
             x_bytes, len_x = encode(x_bytes, d_size)
             y_bytes, len_y = encode(y_bytes, d_size)
         bits.extend(x_bytes)
         bits.extend(y_bytes)
-        return (d_size, d_size) if not USE_ENTROPY else (len_x, len_y)
+        return (d_size, d_size) if not cfg.USE_ENTROPY else (len_x, len_y)
 
 
 def fp_delta_encoding(geometry, d_size, deltas):
+    cfg.ENTROPY_STATE = (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY)
     # List of resulting bytes.
     bits = bitarray(endian='big')
     # Init with 'd_size', 'geom_type'
@@ -169,6 +169,7 @@ def fp_delta_encoding(geometry, d_size, deltas):
     
     # util.pprint(bits)
     # print([int.from_bytes(i, 'big') for i in bytes], '\n')
+    (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY) = cfg.ENTROPY_STATE
     return bits.tobytes()
 
 def calculate_delta_size(geometry, return_deltas=False):
