@@ -2,7 +2,7 @@ from collections import defaultdict
 import shapely
 import numpy as np
 from algos.alg_fpd_extended import FpdExtended
-from intersection.plotting import plot_chunks_bounds, plot_geometry, plot_intersecting_points, create_canvas
+from intersection.plotting import plot_chunks_bounds, plot_geometry, plot_intersecting_points, create_canvas, plot_line
 import matplotlib.pyplot as plt
 import math
 
@@ -70,9 +70,14 @@ def is_contained_within(containee, container, debug_correct_ans=None, plot_all=F
         x, y = fpd.access_vertex(containee, 0)[0]
     else:
         x, y = containee
+
     # Outher bounding box
     x_l, y_b, x_r, y_t = fpd.bounding_box(container)[1]
     distances = [(x_l - x, 0), (0, y_b - y), (x_r - x, 0), (0, y_t - y)]
+    # Is point outside bounding box?
+    if distances[0][0] > 0 or distances[1][1] > 0 or distances[2][0] < 0 or distances[3][1] < 0:
+        return False
+
     ray_end = min(distances, key=lambda x: np.linalg.norm(x))
     ray_end = (x + ray_end[0], y + ray_end[1])
     ray = shapely.LineString([(x, y), ray_end])
@@ -152,7 +157,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
                     cross_to_seg[p_idx][s].append(seg_idx)
                 # else:
                 #     plot_geometry(shapely.LineString(seg), solid=False)
-            seg_to_cross[s][seg_idx].sort(key=lambda x: x) # TODO: Sort on distance to p_0
+            seg_to_cross[s][seg_idx].sort(key=lambda x: np.linalg.norm(segments[s][seg_idx][0] - intersecting_points[x])) # Sort ordered by distance from p[0]
     res_list.append(segments)
     res_list.append(seg_to_cross)
     res_list.append(cross_to_seg)
@@ -210,14 +215,26 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
             return intersecting_points[seg_to_cross[s][seg_idx][v_idx - 2]]
         else:
             return segments[s][seg_idx][v_idx]
-        
+
     def seg_to_middle_point(s, seg_idx, v_idxs):
         l = seg_to_point(s, seg_idx, v_idxs[0])
         r = seg_to_point(s, seg_idx, v_idxs[1])
         return [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2]
 
 
-    # Returns the next unvisited shapes inside both shapes connected to c_i
+    def DEBUG_print_paths(paths, c_i=None):
+        if c_i != None:
+            print(f"--: {intersecting_points[c_i]} :--")
+        print("Raw:", paths)
+        str = ""
+        for p in paths:
+            s, seg_idx, v_idxs, p_dir = p
+            p_dir_sym = '+' if p_dir == 1 else '-'
+            str += f'[{seg_to_point(s, seg_idx, v_idxs[0])} -> {seg_to_point(s, seg_idx, v_idxs[1])} ({p_dir_sym})], '
+        print(str)
+
+
+    # Returns the possible paths (directed segment) from an intersection point. Also checks that it is within both shapes.
     def possible_paths(c_i):
         possible_paths = []
         seg_idxs = cross_to_seg[c_i]
@@ -226,48 +243,77 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
                 seg_cross_cnt = len(seg_to_cross[s][seg_idx])
                 # Get possible successor points
                 # Where is the current cross?
-                c_i_in_seg = seg_to_cross[s][seg_idx].index(c_i)
+                c_i_in_seg = seg_to_cross[s][seg_idx].index(c_i) + 2 # Index of vertex within segment
 
                 # Get previous cross point if exists
-                start_v = c_i_in_seg + 1 if c_i_in_seg != 0 else 0 # V:0 left of segment, V:1 right in segment, V:2+ intersection points
-                possible_paths.append((s, seg_idx, (c_i_in_seg, start_v), 1)) # Vertex 2 being the first cross, 0 is first in traversal order
-                
-                end_v = c_i_in_seg + 3 if c_i_in_seg != seg_cross_cnt - 1 else 1
-                possible_paths.append((s, seg_idx, (c_i_in_seg, end_v), -1)) # Vertex 2 being the first cross, 0 is first in traversal order
+                start_v = c_i_in_seg - 1 if c_i_in_seg != 2 else 0 # V:0 left of segment, V:1 right in segment, V:2+ intersection points
+                if not np.array_equal(seg_to_point(s, seg_idx, start_v), seg_to_point(s, seg_idx, c_i_in_seg)): # Dont add line segments consisting of one point
+                    possible_paths.append((s, seg_idx, (start_v, c_i_in_seg), -1)) # Vertex 2 being the first cross, 0 is first in traversal order
 
-        print(possible_paths, c_i)
+                # Has cross point after?
+                end_v = c_i_in_seg + 1 if c_i_in_seg - 1 != seg_cross_cnt else 1
+                if not np.array_equal(seg_to_point(s, seg_idx, c_i_in_seg), seg_to_point(s, seg_idx, end_v)):
+                    possible_paths.append((s, seg_idx, (c_i_in_seg, end_v), 1)) # Vertex 2 being the first cross, 0 is first in traversal order
+
+        #DEBUG_print_paths(possible_paths, c_i)
         possible_paths = list(filter(lambda p: is_contained_within(seg_to_middle_point(*p[0:3]), bins[(p[0] + 1) % 2]), possible_paths))
-        print(possible_paths)
+        # print("")
+        # DEBUG_print_paths(possible_paths)
+        # print("---")
         return possible_paths
-    
-                    
+
+
 
     intersecting_points, segments, seg_to_cross, cross_to_seg = line_data
+    #print("Intersecting Points:", intersecting_points)
     cross_left = set(range(len(intersecting_points)))
+    processed_ways = [[set(), set()] for _ in range(len(intersecting_points))]
     res_segs = []
     while len(cross_left) > 0:
         c_i = cross_left.pop()
         paths = possible_paths(c_i)
+        # if len(paths) == 0:
+        #     print("FOUND POINT INTERSECTION")
         while len(paths) > 0:
             path = paths.pop()
-            shp_idx, seg_idx, v_idxs, seg_dir = path
+            s, seg_idx, v_idxs, p_dir = path
+            start_idx = 0 if p_dir == 1 else 1 # Start index
+            end_idx = 1 if p_dir == 1 else 0
+
+            if seg_idx in processed_ways[c_i][s]:
+                continue
+
             # V_idxs contains: start_idx, end_index. I.e. the direction to traverse.
             while True: # While no cross point
-                res_segs.append([seg_to_point(shp_idx, seg_idx, v_idxs[0]), seg_to_point(shp_idx, seg_idx, v_idxs[1])]) # Add segment to resulting shape
-                seg_idx = (seg_idx + seg_dir) % len(segments[shp_idx])
-                seg_cross_cnt = len(seg_to_cross[shp_idx][seg_idx])
-                if seg_cross_cnt > 0:
-                    if seg_dir == 1:
-                        res_segs.append([seg_to_point(shp_idx, seg_idx, 0), seg_to_point(shp_idx, seg_idx, 2)])
-                    else:
-                        res_segs.append([seg_to_point(shp_idx, seg_idx, 1), seg_to_point(shp_idx, seg_idx, seg_cross_cnt + 1)])
+                res_segs.append([seg_to_point(s, seg_idx, v_idxs[0]), seg_to_point(s, seg_idx, v_idxs[1])]) # Add segment to resulting shape
+                e_v = v_idxs[end_idx] # Find index of actual end vertex (i.e. flip segment based on direction)
+
+                next_seg_idx = seg_idx + p_dir
+                if e_v > 1: # Is cross point?
+                    encountered_c_idx = seg_to_cross[s][seg_idx][e_v - 2]
+                    processed_ways[encountered_c_idx][s].add(seg_idx)
                     break
+                elif next_seg_idx == -1 or seg_idx == len(segments[s]) or not np.array_equal(seg_to_point(s, seg_idx, e_v), seg_to_point(s, seg_idx, start_idx)):
+                    break # Break if no more segments, or if path formed by segments is not continuous
+                else:
+                    seg_idx = next_seg_idx # Next segment
+                    seg_cross_cnt = len(seg_to_cross[s][seg_idx])
+                    if p_dir == 1:
+                        v_idxs = [0, 2 if seg_cross_cnt != 0 else 1] # Has next line-segment crosspoint? If so take the first cross point as segment end-point.
+                    else:
+                        v_idxs = [2 if seg_cross_cnt != 0 else 0, 1]
 
 
-    create_canvas()
-    plot_intersecting_points(line_data[0])
-    plot_intersecting_points(line_data[1][0])
-    plot_intersecting_points(line_data[1][1])
-    plt.show()
-    print("RES", res_segs)
+    # create_canvas()
+    # #plot_intersecting_points()
+    # for p1, p2 in res_segs:
+    #     plot_intersecting_points([p1, p2])
+    #     plot_line(p1, p2)
+
+
+    # plot_geometry(fpd.decompress(bins[0])[1], solid=False)
+    # plot_geometry(fpd.decompress(bins[1])[1], solid=False)
+
+    # plt.show()
+    # print("RES", res_segs)
     return res_segs
