@@ -30,7 +30,7 @@ def intersection_skip_header(bin):
     cfg.offset += 32 + 4 * FLOAT_SIZE * chk_cnt
 
 def get_chunk_bounds(bin_in):
-    cfg.offset = 2 * 8 + 4 * FLOAT_SIZE # Skip normal header
+    cfg.offset = 3 * 8 + 4 * FLOAT_SIZE # Skip normal header
     chk_cnt = struct.unpack_from('!I', bin_in, offset=cfg.offset//8)[0]
     bin = bitarray(endian='big')
     bin.frombytes(bin_in)
