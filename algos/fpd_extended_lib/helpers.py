@@ -1,4 +1,6 @@
 import math
+import zlib
+import gzip
 from bitarray import bitarray, util
 from shapely import GeometryType as GT
 from algos.fpd_extended_lib.cfg import *
@@ -62,7 +64,6 @@ def get_chunks(bin_in, include_ring_start=True):
 
 def access_vertex(bin_in, idx, cache=[]):
     return random_access(bin_in, idx, cache, get_chunk=False)
-
 
 def access_chunk(bin_in, idx, cache=[]):
     """
@@ -163,38 +164,42 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
     
     return ((x, y) if not list_vertices else vertices), cache
 
-def calculate_delta_size(geometry, return_deltas=False):
-    deltas = [[], []]
-    RESET_POINT_SIZE = FLOAT_SIZE * 2 + D_CNT_SIZE
-    coords = shapely.get_coordinates(geometry)
-    prev = [0, 0]
-    bit_cnts = {}
-    for coord in coords:
-        bit_cnt = 0
-        for i in range(2):
-            d = get_zz_encoded_delta(prev[i], coord[i])
-            d_bit_cnt = 1 if d == 0 else math.ceil(math.log2(d))
-            bit_cnt = max(bit_cnt, d_bit_cnt)
-            if return_deltas:
-                deltas[0].append(coord[i] - prev[i])
-                deltas[1].append(d)
-
-        if bit_cnt not in bit_cnts:
-            bit_cnts[bit_cnt] = 1
-        else:
-            bit_cnts[bit_cnt] += 1
-        prev = coord
-    bit_cnts = dict(sorted(bit_cnts.items(), reverse=True))
-
-    tot_size = {}
-    upper_cnt = 0
-    lower_cnt = len(coords)
-    for n in bit_cnts.keys():
-        tot_size[n] = n * lower_cnt * 2 + RESET_POINT_SIZE * upper_cnt
-        lower_cnt -= bit_cnts[n]
-        upper_cnt += bit_cnts[n]
-
-    return min(tot_size, key=tot_size.get), bit_cnts, deltas
-
 def get_zz_encoded_delta(prev_coord, curr_coord):
     return zz_encode(double_as_long(curr_coord) - double_as_long(prev_coord))
+
+def compress_chunk(bits, chk_hdr_offset, delta_bytes_size):
+    chk_coord_offset = chk_hdr_offset + D_CNT_SIZE * 2
+    before_bits = bits[:chk_coord_offset]
+    coords_bits = bits[chk_coord_offset: chk_coord_offset + delta_bytes_size + 2 * FLOAT_SIZE]
+    if cfg.COMPRESSION_METHOD == "zlib":
+        comp_coords_bytes = zlib.compress(coords_bits.tobytes())
+    elif cfg.COMPRESSION_METHOD == "gzip":
+        comp_coords_bytes = gzip.compress(coords_bits.tobytes())
+    else:
+        comp_coords_bytes = coords_bits.tobytes()
+    comp_coords_bits = bitarray()
+    comp_coords_bits.frombytes(comp_coords_bytes)
+    before_bits += comp_coords_bits
+    return before_bits, len(comp_coords_bits)
+
+def decompress_chunk(bits, chk_coord_offset, coords_bytes_size):
+    before_bits = bits[:chk_coord_offset]
+    comp_coords_bits = bits[chk_coord_offset: chk_coord_offset + coords_bytes_size]
+    after_bits = bits[chk_coord_offset + coords_bytes_size:]
+
+    if cfg.COMPRESSION_METHOD == "zlib":
+        coords_bits = zlib.decompress(comp_coords_bits.tobytes())
+    elif cfg.COMPRESSION_METHOD == "gzip":
+        coords_bits = gzip.decompress(comp_coords_bits.tobytes())
+    else:
+        coords_bits = comp_coords_bits.tobytes()
+    decompressed_bits = bitarray()
+    decompressed_bits.frombytes(coords_bits)
+
+    before_bits[chk_coord_offset - D_CNT_SIZE * 2:chk_coord_offset - D_CNT_SIZE] =  uint_to_ba(len(decompressed_bits) - 2 * FLOAT_SIZE, D_CNT_SIZE) 
+
+    before_bits += decompressed_bits
+    before_bits += after_bits
+    cfg.binary_length = len(before_bits)
+    return before_bits, len(decompressed_bits)
+

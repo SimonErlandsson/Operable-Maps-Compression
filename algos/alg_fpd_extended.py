@@ -82,21 +82,19 @@ def main():
         'POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.184812 55.705646, 13.1848537 55.7057363))')
     geom7 = shapely.wkt.loads('MULTIPOLYGON (((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848861 55.705646, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1847300 55.705712, 13.1847425 55.7057123)), ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848841 55.705626, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1848861 55.705646, 13.1847425 55.7057123)))')
     geom8 = shapely.wkt.loads('POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848861 55.705646, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1847300 55.705712, 13.1847425 55.7057123))')
+    from algos.fpd_extended_lib.entropy_coder import encode, decode
 
-    # print(shapely.get_coordinates(geom7))
-    # t, bin3 = x.compress(geom1)
-    # t, bin4 = x.compress(geom2)
 
-    # print(x.access_vertex(bin4, 6, getBoundsData=True))
-    t, bin = x.compress(geom_fail)
-    print(x.get_chunk_bounds(bin))
-    print(x.get_chunks(bin))
-    #print(x.get_chunk(bin, 0)[0])
-    print(x.get_chunk(bin, 1)[0])
-    #t, bin = x.add_vertex((bin, 1, (0.5, 0.2)))
-    t, geomx = x.decompress(bin)
-    print(geomx)
-
+    import bench_utils
+    K = 10
+    diff_sum = 0
+    df, unary_idxs = bench_utils.read_dataset("data/world.json")
+    for idx in unary_idxs: # List of single idxs
+        t, bin = x.compress(shape(df.iloc[idx]))
+        t, geomx = x.decompress(bin)
+        if geomx != shape(df.iloc[idx]):
+            print(geomx, shape(df.iloc[idx]), sep="\n\n")
+        
 
 if __name__ == "__main__":
     main()

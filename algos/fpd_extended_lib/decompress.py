@@ -11,8 +11,13 @@ from shapely import GeometryType as GT
 
 # Structural things (per type):
 def sequence_decoder(bin, seq_list, delta_size):
-    cfg.offset += D_CNT_SIZE
+    delta_bytes_size = bytes_to_uint(bin, D_CNT_SIZE)
     chk_size = bytes_to_uint(bin, D_CNT_SIZE)
+    if COMPRESS_CHUNK:
+        chk_coord_offset = cfg.offset
+        bin, coord_bit_len = algos.fpd_extended_lib.helpers.decompress_chunk(bin, chk_coord_offset, delta_bytes_size)
+        offset = cfg.offset
+   
     # Extract reset point
     x = bytes_to_double(bin)
     y = bytes_to_double(bin)
@@ -23,14 +28,21 @@ def sequence_decoder(bin, seq_list, delta_size):
         y = bytes_to_decoded_coord(bin, y, delta_size)
         seq_list.append((x, y))
 
+    if COMPRESS_CHUNK:
+        cfg.offset += coord_bit_len - (cfg.offset - offset)
+    
+    return bin
+
 def ring_decoder(bin, polygon_list, delta_size):
     # Extract number of chunks for a ring
     chks_in_ring = bytes_to_uint(bin, RING_CHK_CNT_SIZE)
     ring_coords = []
     # Loop through chunks in ring
     for i in range(chks_in_ring):
-        sequence_decoder(bin, ring_coords, delta_size)
+        bin = sequence_decoder(bin, ring_coords, delta_size)
     polygon_list.append(ring_coords)
+
+    return bin
 
 def polygon_decoder(bin, multipolygon_coords, delta_size):
     # Extract number of rings for a polygon
@@ -38,14 +50,18 @@ def polygon_decoder(bin, multipolygon_coords, delta_size):
     polygon_coords = []
     # Loop through rings in polygon
     for _ in range(rings_in_poly):
-        ring_decoder(bin, polygon_coords, delta_size)
+        bin = ring_decoder(bin, polygon_coords, delta_size)
     multipolygon_coords.append(shapely.Polygon(shell=polygon_coords[0], holes=polygon_coords[1:]))
+    return bin
+
 
 def decode_header(bin):
-    delta_size, type = struct.unpack_from('!BB', bin)
+    delta_size, type, entropy_param = struct.unpack_from('!BBB', bin)
     type = GT(type)
-    cfg.offset += 2 * 8 + 4 * FLOAT_SIZE  # Offset is 2 bytes for BB + 64 * 4 for bounding box
+    algos.fpd_extended_lib.entropy_coder.decode_entropy_param(entropy_param, delta_size)
+    cfg.offset += 3 * 8 + 4 * FLOAT_SIZE  # Offset is 2 bytes for BBB + FLOAT_SIZE * 4 for bounding box
     algos.fpd_extended_lib.intersection_chunk_bbox_wrapper.intersection_skip_header(bin) # Circular import
+
 
     return delta_size, type
 
@@ -56,21 +72,22 @@ def fp_delta_decoding(bin_in):
 
     delta_size, type = decode_header(bin)
 
-    binary_length = len(bin)
+    cfg.binary_length = len(bin)
     coords = []
     if type == GT.LINESTRING:
-        while (cfg.offset + EOF_THRESHOLD <= binary_length):  # While != EOF
-            sequence_decoder(bin, coords, delta_size)
+        while (cfg.offset + EOF_THRESHOLD <= cfg.binary_length):  # While != EOF
+            bin = sequence_decoder(bin, coords, delta_size)
         geometry = shapely.LineString(coords)
 
     elif type == GT.POLYGON:
-        while (cfg.offset + EOF_THRESHOLD <= binary_length):  # While != EOF, i.e. at least one byte left
-            ring_decoder(bin, coords, delta_size)
+        while (cfg.offset + EOF_THRESHOLD <= cfg.binary_length):  # While != EOF, i.e. at least one byte left
+            bin = ring_decoder(bin, coords, delta_size)
+
         geometry = shapely.Polygon(shell=coords[0], holes=coords[1:])
 
     elif type == GT.MULTIPOLYGON:
-        while (cfg.offset + EOF_THRESHOLD <= binary_length):  # While != EOF
-            polygon_decoder(bin, coords, delta_size)
+        while (cfg.offset + EOF_THRESHOLD <= cfg.binary_length):  # While != EOF
+            bin = polygon_decoder(bin, coords, delta_size)
         geometry = shapely.MultiPolygon(coords)
     return geometry
 

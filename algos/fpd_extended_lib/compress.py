@@ -6,8 +6,8 @@ import time
 from shapely import GeometryType as GT
 from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import *
 from algos.fpd_extended_lib.low_level import *
-from algos.fpd_extended_lib.helpers import calculate_delta_size, get_zz_encoded_delta
-from algos.fpd_extended_lib.entropy_coder import encode
+from algos.fpd_extended_lib.helpers import get_zz_encoded_delta, compress_chunk
+from algos.fpd_extended_lib.entropy_coder import encode, get_entropy_metadata
 
 def get_zz_encoded_delta(prev_coord, curr_coord):
     return zz_encode(double_as_long(curr_coord) - double_as_long(prev_coord))
@@ -37,10 +37,12 @@ def point_count(geometry):
             ring_count.append(poly_ring_count)
     return ring_count
 
-def append_header(bits, geometry, d_size):
+def append_header(bits, geometry, d_size, deltas):
+    (cfg.ENTROPY_METHOD, cfg.USE_ENTROPY,cfg.ENTROPY_PARAM) = get_entropy_metadata(deltas, d_size)
     # Meta data
     bits.frombytes(uchar_to_bytes(d_size))
     bits.frombytes(uchar_to_bytes(int(shapely.get_type_id(geometry))))  # 1 byte is enough for storing type
+    bits.frombytes(uchar_to_bytes(cfg.ENTROPY_PARAM))
     # Bounding Box
     bounds = shapely.bounds(geometry)
     bits.frombytes(double_to_bytes(bounds[0]))
@@ -53,19 +55,20 @@ def append_header(bits, geometry, d_size):
 def append_delta_pair(bits, d_x_zig, d_y_zig, d_size):
         x_bytes = uint_to_ba(d_x_zig, d_size)
         y_bytes = uint_to_ba(d_y_zig, d_size)
-        if USE_ENTROPY:
+        if cfg.USE_ENTROPY:
             x_bytes, len_x = encode(x_bytes, d_size)
             y_bytes, len_y = encode(y_bytes, d_size)
         bits.extend(x_bytes)
         bits.extend(y_bytes)
-        return (d_size, d_size) if not USE_ENTROPY else (len_x, len_y)
+        return (d_size, d_size) if not cfg.USE_ENTROPY else (len_x, len_y)
 
 
-def fp_delta_encoding(geometry, d_size):
+def fp_delta_encoding(geometry, d_size, deltas):
+    cfg.ENTROPY_STATE = (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY)
     # List of resulting bytes.
     bits = bitarray(endian='big')
     # Init with 'd_size', 'geom_type'
-    append_header(bits, geometry, d_size)
+    append_header(bits, geometry, d_size, deltas)
 
     # Type specific variables
     geo_type = shapely.get_type_id(geometry)
@@ -80,7 +83,7 @@ def fp_delta_encoding(geometry, d_size):
     prev_x, prev_y = 0, 0  # Absolute value of previous coord
     chk_deltas = 0  # Cnt of 'deltas in chunk'
     chk_deltas_bytes = 0  # Cnt of 'deltas in chunk'
-    chk_deltas_idx = 0  # Pointer to 'deltas of chunk'
+    chk_hdr_offset = 0  # Pointer to 'deltas of chunk'
     num_chks_ring = 0  # Cnt of 'number of chunks for current ring'
     num_chks_ring_idx = 0  # Pointer to latest 'number of chunks for ring'
     rem_points_ring = 0  # Cnt of 'points left to process in current ring'
@@ -105,13 +108,18 @@ def fp_delta_encoding(geometry, d_size):
         prev_x, prev_y = (x, y)
 
         # ---- CREATE NEW CHUNK? If 'first chunk', 'delta doesn't fit', 'new ring', or 'reached max deltas'
-        if chk_deltas_idx == 0 or not deltas_fit_in_bits(d_x_zig, d_y_zig, d_size) or rem_points_ring == 0 or chk_deltas == MAX_NUM_DELTAS:
+        if chk_hdr_offset == 0 or not deltas_fit_in_bits(d_x_zig, d_y_zig, d_size) or rem_points_ring == 0 or chk_deltas == MAX_NUM_DELTAS:
             # If not 'first chunk' -> save previous chunk's size
-            if chk_deltas_idx != 0:
-                bits[chk_deltas_idx:chk_deltas_idx + D_CNT_SIZE] = uint_to_ba(chk_deltas_bytes, D_CNT_SIZE)
-                bits[chk_deltas_idx + D_CNT_SIZE :chk_deltas_idx + D_CNT_SIZE * 2] = uint_to_ba(chk_deltas, D_CNT_SIZE)
+            if chk_hdr_offset != 0:
+                if COMPRESS_CHUNK:
+                    bits, chk_deltas_bytes = compress_chunk(bits, chk_hdr_offset, chk_deltas_bytes)
+
+                bits[chk_hdr_offset:chk_hdr_offset + D_CNT_SIZE] = uint_to_ba(chk_deltas_bytes, D_CNT_SIZE)
+                bits[chk_hdr_offset + D_CNT_SIZE :chk_hdr_offset + D_CNT_SIZE * 2] = uint_to_ba(chk_deltas, D_CNT_SIZE)
+
             ###### ---- INITIALIZE NEW CHUNK ----- ######
             chk_deltas, chk_deltas_bytes = 0, 0
+
             intersection_chunk_bboxes.append([x, y, x, y])
 
             ### __ RING/MULTI-POLYGON META-DATA __ ###
@@ -134,7 +142,7 @@ def fp_delta_encoding(geometry, d_size):
             ### __ ------------ END ------------- __ ###
 
             # Preparing chunk size (number of deltas)
-            chk_deltas_idx = len(bits)
+            chk_hdr_offset = len(bits)
             bits.extend(uint_to_ba(0, D_CNT_SIZE * 2))  # Reserve space for size
 
             # Add full coordinates
@@ -152,13 +160,16 @@ def fp_delta_encoding(geometry, d_size):
         rem_points_ring -= 1
 
     # All points processed. Update size of final chunk
+    if COMPRESS_CHUNK:
+        bits, chk_deltas_bytes = compress_chunk(bits, chk_hdr_offset, chk_deltas_bytes)
 
-    bits[chk_deltas_idx:chk_deltas_idx + D_CNT_SIZE] = uint_to_ba(chk_deltas_bytes, D_CNT_SIZE)
-    bits[chk_deltas_idx + D_CNT_SIZE :chk_deltas_idx + D_CNT_SIZE * 2] = uint_to_ba(chk_deltas, D_CNT_SIZE)    
+    bits[chk_hdr_offset:chk_hdr_offset + D_CNT_SIZE] = uint_to_ba(chk_deltas_bytes, D_CNT_SIZE)
+    bits[chk_hdr_offset + D_CNT_SIZE :chk_hdr_offset + D_CNT_SIZE * 2] = uint_to_ba(chk_deltas, D_CNT_SIZE)    
     bits = intersection_append_header(bits, intersection_chunk_bboxes)
-
+    
     # util.pprint(bits)
     # print([int.from_bytes(i, 'big') for i in bytes], '\n')
+    (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY) = cfg.ENTROPY_STATE
     return bits.tobytes()
 
 def calculate_delta_size(geometry, return_deltas=False):
@@ -191,12 +202,12 @@ def calculate_delta_size(geometry, return_deltas=False):
         tot_size[n] = n * lower_cnt * 2 + RESET_POINT_SIZE * upper_cnt
         lower_cnt -= bit_cnts[n]
         upper_cnt += bit_cnts[n]
-
-    return min(tot_size, key=tot_size.get), bit_cnts, deltas
+    optimal_delta_size = min(tot_size, key=tot_size.get)
+    return optimal_delta_size, bit_cnts, deltas
 
 def compress(self, geometry):
     s = time.perf_counter()
-    optimal_size, _, _ = calculate_delta_size(geometry)
-    bin = fp_delta_encoding(geometry, optimal_size)
+    optimal_size, _, deltas = calculate_delta_size(geometry, True)
+    bin = fp_delta_encoding(geometry, optimal_size, deltas[1])
     t = time.perf_counter()
     return t - s, bin
