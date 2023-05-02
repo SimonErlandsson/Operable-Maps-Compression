@@ -38,8 +38,8 @@ def vertices(self, bin_in):
     chunks_in_ring_left = 0  # Used for iteration
     chunks_in_ring = 0
     rings_left = 0
-    bin_len = len(bin)
-    while (cfg.offset + EOF_THRESHOLD <= bin_len):
+    cfg.binary_length = len(bin)
+    while (cfg.offset + EOF_THRESHOLD <= cfg.binary_length):
         if is_multipolygon and rings_left == 0:
             rings_left = bytes_to_uint(bin, POLY_RING_CNT_SIZE)
         if not is_linestring and chunks_in_ring_left == 0:
@@ -47,12 +47,16 @@ def vertices(self, bin_in):
             chunks_in_ring = chunks_in_ring_left
 
         # Go through chunk (inlined sequence decode)
-        cfg.offset += D_CNT_SIZE
-
+        delta_bytes_size = bytes_to_uint(bin, D_CNT_SIZE)
         deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
         # Extract reset point
         x = bytes_to_double(bin)
         y = bytes_to_double(bin)
+
+        if COMPRESS_CHUNK:
+            chk_deltas_offset = cfg.offset # = X
+            bin, coord_bit_len = algos.fpd_extended_lib.helpers.decompress_chunk(bin, chk_deltas_offset, delta_bytes_size) 
+   
         if chunks_in_ring_left == chunks_in_ring:
             x_ring, y_ring = (x, y)
         coords.append([x, y])
@@ -61,6 +65,9 @@ def vertices(self, bin_in):
             x = bytes_to_decoded_coord(bin, x, delta_size)
             y = bytes_to_decoded_coord(bin, y, delta_size)
             coords.append([x, y])
+        if COMPRESS_CHUNK:
+            cfg.offset = chk_deltas_offset + coord_bit_len
+
         chunks_in_ring_left -= 1
         if chunks_in_ring_left == 0:
             coords.append([x_ring, y_ring])

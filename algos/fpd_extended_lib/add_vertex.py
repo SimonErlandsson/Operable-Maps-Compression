@@ -33,7 +33,7 @@ def add_vertex(self, args):
     chunks_in_ring_left = 0  # Used for iteration
     chunks_in_ring = 0  # Cache for store later
     rings_left = 0
-    bin_len = len(bin)
+    cfg.binary_length = len(bin)
     while (p_idx <= insert_idx):
         if is_multipolygon and rings_left == 0:
             rings_left = bytes_to_uint(bin, POLY_RING_CNT_SIZE)
@@ -56,7 +56,9 @@ def add_vertex(self, args):
             if p_idx != insert_idx:  # Has a left coordinate?
                 split = deltas_in_chunk_offset + D_CNT_SIZE * 2 + FLOAT_SIZE * 2 + delta_offsets[deltas_left] - delta_offsets[0]
                 # Update delta cnt
+                bin[deltas_in_chunk_offset :deltas_in_chunk_offset + D_CNT_SIZE] = uint_to_ba(delta_offsets[deltas_left] - delta_offsets[0], D_CNT_SIZE)
                 bin[deltas_in_chunk_offset + D_CNT_SIZE :deltas_in_chunk_offset + D_CNT_SIZE * 2] = uint_to_ba(deltas_left, D_CNT_SIZE)
+                
             else:
                 split = deltas_in_chunk_offset
 
@@ -89,7 +91,7 @@ def add_vertex(self, args):
             if (chunks_in_ring_left == 0):
                 rings_left -= 1
 
-            if cfg.offset >= bin_len and is_linestring:
+            if cfg.offset >= cfg.binary_length and is_linestring:
                 # Reached end without appending: is linestring!
                 new = create_chunk(pos)
                 bin.extend(new)

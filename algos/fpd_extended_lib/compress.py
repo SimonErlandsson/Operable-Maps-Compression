@@ -6,8 +6,8 @@ import time
 from shapely import GeometryType as GT
 from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import *
 from algos.fpd_extended_lib.low_level import *
-from algos.fpd_extended_lib.helpers import get_zz_encoded_delta, compress_chunk
-from algos.fpd_extended_lib.entropy_coder import encode, get_entropy_metadata
+from algos.fpd_extended_lib.helpers import get_zz_encoded_delta
+from algos.fpd_extended_lib.entropy_coder import encode, get_entropy_metadata, compress_chunk
 
 def get_zz_encoded_delta(prev_coord, curr_coord):
     return zz_encode(double_as_long(curr_coord) - double_as_long(prev_coord))

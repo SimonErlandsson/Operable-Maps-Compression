@@ -90,11 +90,9 @@ def main():
     diff_sum = 0
     df, unary_idxs = bench_utils.read_dataset("data/world.json")
     for idx in unary_idxs: # List of single idxs
-        t, bin = x.compress(shape(df.iloc[idx]))
+        t, bin = x.compress(shape(df.iloc[idx + 1]))
         t, geomx = x.decompress(bin)
-        if geomx != shape(df.iloc[idx]):
-            print(geomx, shape(df.iloc[idx]), sep="\n\n")
-        
+        break
 
 if __name__ == "__main__":
     main()

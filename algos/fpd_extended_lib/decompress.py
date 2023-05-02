@@ -13,24 +13,23 @@ from shapely import GeometryType as GT
 def sequence_decoder(bin, seq_list, delta_size):
     delta_bytes_size = bytes_to_uint(bin, D_CNT_SIZE)
     chk_size = bytes_to_uint(bin, D_CNT_SIZE)
-    if COMPRESS_CHUNK:
-        chk_coord_offset = cfg.offset
-        bin, coord_bit_len = algos.fpd_extended_lib.helpers.decompress_chunk(bin, chk_coord_offset, delta_bytes_size)
-        offset = cfg.offset
-   
+
     # Extract reset point
     x = bytes_to_double(bin)
     y = bytes_to_double(bin)
+
+    if COMPRESS_CHUNK:
+        chk_deltas_offset = cfg.offset # = X
+        bin, coord_bit_len = algos.fpd_extended_lib.entropy_coder.decompress_chunk(bin, chk_deltas_offset, delta_bytes_size) 
+   
     seq_list.append((x, y))
     # Loop through deltas in chunk
     for _ in range(chk_size):
         x = bytes_to_decoded_coord(bin, x, delta_size)
         y = bytes_to_decoded_coord(bin, y, delta_size)
         seq_list.append((x, y))
-
     if COMPRESS_CHUNK:
-        cfg.offset += coord_bit_len - (cfg.offset - offset)
-    
+        cfg.offset = chk_deltas_offset + coord_bit_len
     return bin
 
 def ring_decoder(bin, polygon_list, delta_size):
