@@ -33,9 +33,9 @@ def double_as_float_int(num):
 
 def float_int_as_double(num):
     neg = False
-    num = str(zz_decode(num))
     if num == 0:
         return 0.0
+    num = str(zz_decode(num))
     if num[0] == "-":
         neg = True
         num = num[1:]
