@@ -1,15 +1,11 @@
 import shapely
 import json
 
-def read_dataset(DATASET_PATH = "data/lund_building_highway.json"):
+def read_dataset(DATASET_PATH = "data/lund_building_highway.json", NBR_ITER = 16000):
     import random
     import pandas as pd
     import json
     #DATASET_PATH = "data/world.json"
-    NBR_ITER = 16000
-
-    SEED = 123 # If we want to enforce the same ordering and indexes for multiple runs, else None
-    random.seed(SEED) # Init random
 
     # Extract the nested feature attribute of the geo_json file containing the geometries
     with open(DATASET_PATH, 'r') as f:
@@ -21,7 +17,6 @@ def read_dataset(DATASET_PATH = "data/lund_building_highway.json"):
 
     max_idx = len(df) - 1
     unary_idxs = [random.randint(0, max_idx) for i in range(NBR_ITER)] # Generate list of indexes to query on
-    random.seed(SEED) # Reset random
     return df, unary_idxs
 
 def parse_intersection_data(file_name, max_shps=999999999):

@@ -15,9 +15,9 @@ def set_entropy_code(path):
     from algos.fpd_extended_lib.compress import calculate_delta_size
     if ENTROPY_METHOD == "Huffman" or cfg.AUTO_SELECT_METHOD:
         total_deltas = []
-        df, unary_idxs = bench_utils.read_dataset(path)
+        df, _ = bench_utils.read_dataset(path, )
         deltas_by_bits = defaultdict(list)
-        for idx in unary_idxs: # List of single idxs
+        for idx in range(len(df)): # List of single idxs
             opt_size, _, delta_list = calculate_delta_size(shape(df.iloc[idx]), True)
             for delta in delta_list[1]:
                 #If coordinate not delta_encoded

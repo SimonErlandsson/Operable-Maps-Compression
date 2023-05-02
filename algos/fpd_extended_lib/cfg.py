@@ -15,7 +15,7 @@ EXPONENT = 6
 D_CNT_SIZE = 32 if USE_DEFAULT_DOUBLE else 16
 POLY_RING_CNT_SIZE = 16
 RING_CHK_CNT_SIZE = 16
-MAX_NUM_DELTAS = 10  # Max number of deltas in a chunk before split
+MAX_NUM_DELTAS = 30  # Max number of deltas in a chunk before split
 EOF_THRESHOLD = 2 * D_CNT_SIZE + FLOAT_SIZE * 2  # Number of bits required to continue parsing
 
 
