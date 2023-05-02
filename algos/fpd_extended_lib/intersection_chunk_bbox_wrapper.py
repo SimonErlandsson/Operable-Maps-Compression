@@ -52,11 +52,12 @@ def is_intersecting(self, args):
 
 
 def intersection(self, args):
+    from intersection.chunk_bbox_intersection import intersection as intersect # Prevent circular import
     l_bin, r_bin = args
     s = time.perf_counter()
-    _, l_geo = self.decompress(l_bin)
-    _, r_geo = self.decompress(r_bin)
-    res = shapely.intersection(l_geo, r_geo)
+
+    res = intersect(args)
+
     t = time.perf_counter()
 
     return t - s, res
