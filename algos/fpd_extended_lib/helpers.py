@@ -37,7 +37,8 @@ def get_chunks(bin_in, include_ring_start=True):
             chunks_in_ring = chunks_in_ring_left
 
         # Go through chunk (inlined sequence decode)
-        deltas_bytes_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
+        if cfg.COMPRESS_CHUNK:
+            deltas_bytes_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
         deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
         # Extract reset point
         x = bytes_to_double(bin)
@@ -139,7 +140,9 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
     within the chunk, up until and including idx.
     """
     old_offset = cfg.offset
-    cfg.offset = chk_offset + D_CNT_SIZE #skips delta bytes
+    cfg.offset = chk_offset
+    if cfg.COMPRESS_CHUNK:
+        cfg.offset += D_CNT_SIZE #skips delta bytes
     deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
     if idx == None:
         idx = deltas_in_chunk
@@ -163,6 +166,3 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
         return ((x, y) if not list_vertices else vertices), cache, delta_offsets
     
     return ((x, y) if not list_vertices else vertices), cache
-
-def get_zz_encoded_delta(prev_coord, curr_coord):
-    return zz_encode(double_as_long(curr_coord) - double_as_long(prev_coord))

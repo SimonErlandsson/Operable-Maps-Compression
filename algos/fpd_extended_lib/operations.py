@@ -8,6 +8,7 @@ import bisect
 from bitarray import bitarray, util
 from algos.fpd_extended_lib.cfg import *
 from algos.fpd_extended_lib.decompress import *
+from algos.fpd_extended_lib.helpers import decompress_chunk
 
 
 def type(self, bin):
@@ -46,16 +47,19 @@ def vertices(self, bin_in):
             chunks_in_ring_left = bytes_to_uint(bin, RING_CHK_CNT_SIZE)
             chunks_in_ring = chunks_in_ring_left
 
-        # Go through chunk (inlined sequence decode)
-        delta_bytes_size = bytes_to_uint(bin, D_CNT_SIZE)
         deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
+
+        if COMPRESS_CHUNK:
+            # Go through chunk (inlined sequence decode)
+            delta_bytes_size = bytes_to_uint(bin, D_CNT_SIZE)
+
         # Extract reset point
         x = bytes_to_double(bin)
         y = bytes_to_double(bin)
 
         if COMPRESS_CHUNK:
             chk_deltas_offset = cfg.offset # = X
-            bin, coord_bit_len = algos.fpd_extended_lib.helpers.decompress_chunk(bin, chk_deltas_offset, delta_bytes_size) 
+            bin, coord_bit_len = decompress_chunk(bin, chk_deltas_offset, delta_bytes_size) 
    
         if chunks_in_ring_left == chunks_in_ring:
             x_ring, y_ring = (x, y)

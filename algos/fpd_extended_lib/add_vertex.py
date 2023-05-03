@@ -7,10 +7,10 @@ import algos.fpd_extended_lib.cfg
 from algos.fpd_extended_lib.low_level import *
 from algos.fpd_extended_lib.decompress import *
 
+# Not implemented to work with COMPRESS_CHUNK==TRUE
 def add_vertex(self, args):
-    def create_chunk(reset_point, delta_cnt=0, delta_bytes=0):
+    def create_chunk(reset_point, delta_cnt=0):
         middle = bitarray(endian='big')
-        middle.extend(uint_to_ba(delta_bytes, D_CNT_SIZE))
         middle.extend(uint_to_ba(delta_cnt, D_CNT_SIZE))
         # Add full coordinates
         middle.frombytes(double_to_bytes(reset_point[0]))
@@ -33,7 +33,7 @@ def add_vertex(self, args):
     chunks_in_ring_left = 0  # Used for iteration
     chunks_in_ring = 0  # Cache for store later
     rings_left = 0
-    cfg.binary_length = len(bin)
+    bin_len = len(bin)
     while (p_idx <= insert_idx):
         if is_multipolygon and rings_left == 0:
             rings_left = bytes_to_uint(bin, POLY_RING_CNT_SIZE)
@@ -42,23 +42,19 @@ def add_vertex(self, args):
             chunks_in_ring_left = bytes_to_uint(bin, RING_CHK_CNT_SIZE)
             chunks_in_ring = chunks_in_ring_left
         deltas_in_chunk_offset = cfg.offset
-        deltas_bytes_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
         deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
 
         # print(p_idx, deltas_in_chunk, insert_idx)
         # Found chunk to append/prepend?
         if p_idx <= insert_idx and insert_idx <= p_idx + deltas_in_chunk + (1 if chunks_in_ring_left == 1 else 0):
-            rst_p, _, delta_offsets = access_vertex_chk(bin, deltas_in_chunk_offset, delta_size, insert_idx - p_idx, get_delta_offsets=True)
             deltas_left = max(insert_idx - p_idx - 1, 0)
             deltas_right = deltas_in_chunk - deltas_left
             # print(deltas_left, deltas_right)
             # Handle left
             if p_idx != insert_idx:  # Has a left coordinate?
-                split = deltas_in_chunk_offset + D_CNT_SIZE * 2 + FLOAT_SIZE * 2 + delta_offsets[deltas_left] - delta_offsets[0]
+                split = deltas_in_chunk_offset + D_CNT_SIZE + FLOAT_SIZE * 2 + delta_size * 2 * deltas_left
                 # Update delta cnt
-                bin[deltas_in_chunk_offset :deltas_in_chunk_offset + D_CNT_SIZE] = uint_to_ba(delta_offsets[deltas_left] - delta_offsets[0], D_CNT_SIZE)
-                bin[deltas_in_chunk_offset + D_CNT_SIZE :deltas_in_chunk_offset + D_CNT_SIZE * 2] = uint_to_ba(deltas_left, D_CNT_SIZE)
-                
+                bin[deltas_in_chunk_offset:deltas_in_chunk_offset + D_CNT_SIZE] = uint_to_ba(deltas_left, D_CNT_SIZE)
             else:
                 split = deltas_in_chunk_offset
 
@@ -68,9 +64,10 @@ def add_vertex(self, args):
             # Handle chunk tail
             if deltas_right > 0 and p_idx != insert_idx:
                 # Get the absolute coordinate for first right coordinate
-                right = create_chunk(rst_p, deltas_right - 1, delta_bytes=delta_offsets[-1] - delta_offsets[deltas_left + 1])
+                rst_p, _ = access_vertex_chk(bin, deltas_in_chunk_offset, delta_size, insert_idx - p_idx)
+                right = create_chunk(rst_p, deltas_right - 1)
                 # Append old tail, without the one extracted point
-                right.extend(bin[split + delta_offsets[deltas_left + 1] - delta_offsets[deltas_left]:])
+                right.extend(bin[split + delta_size * 2:])
                 chunks_in_ring += 1
             else:
                 right = bin[split:]
@@ -86,12 +83,12 @@ def add_vertex(self, args):
         else:
             # Jump to next chunk
             p_idx += 1 + deltas_in_chunk + (1 if chunks_in_ring_left == 1 else 0)
-            cfg.offset += FLOAT_SIZE * 2 + deltas_bytes_in_chunk
+            cfg.offset += FLOAT_SIZE * 2 + delta_size * 2 * deltas_in_chunk
             chunks_in_ring_left -= 1
             if (chunks_in_ring_left == 0):
                 rings_left -= 1
 
-            if cfg.offset >= cfg.binary_length and is_linestring:
+            if cfg.offset >= bin_len and is_linestring:
                 # Reached end without appending: is linestring!
                 new = create_chunk(pos)
                 bin.extend(new)

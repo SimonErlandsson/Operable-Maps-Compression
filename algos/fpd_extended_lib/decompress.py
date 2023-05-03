@@ -7,20 +7,22 @@ from algos.fpd_extended_lib.low_level import *
 import algos.fpd_extended_lib.cfg as cfg
 from algos.fpd_extended_lib.cfg import *
 from shapely import GeometryType as GT
+from algos.fpd_extended_lib.entropy_coder import decompress_chunk, decode_entropy_param
 
 
 # Structural things (per type):
 def sequence_decoder(bin, seq_list, delta_size):
-    delta_bytes_size = bytes_to_uint(bin, D_CNT_SIZE)
     chk_size = bytes_to_uint(bin, D_CNT_SIZE)
+    if cfg.COMPRESS_CHUNK:
+        delta_bytes_size = bytes_to_uint(bin, D_BITSIZE_SIZE)
 
     # Extract reset point
     x = bytes_to_double(bin)
     y = bytes_to_double(bin)
 
-    if COMPRESS_CHUNK:
-        chk_deltas_offset = cfg.offset # = X
-        bin, coord_bit_len = algos.fpd_extended_lib.entropy_coder.decompress_chunk(bin, chk_deltas_offset, delta_bytes_size) 
+    if cfg.COMPRESS_CHUNK:
+        chk_deltas_offset = cfg.offset
+        bin, coord_bit_len = decompress_chunk(bin, chk_deltas_offset, delta_bytes_size) 
    
     seq_list.append((x, y))
     # Loop through deltas in chunk
@@ -28,7 +30,7 @@ def sequence_decoder(bin, seq_list, delta_size):
         x = bytes_to_decoded_coord(bin, x, delta_size)
         y = bytes_to_decoded_coord(bin, y, delta_size)
         seq_list.append((x, y))
-    if COMPRESS_CHUNK:
+    if cfg.COMPRESS_CHUNK:
         cfg.offset = chk_deltas_offset + coord_bit_len
     return bin
 
@@ -40,7 +42,6 @@ def ring_decoder(bin, polygon_list, delta_size):
     for i in range(chks_in_ring):
         bin = sequence_decoder(bin, ring_coords, delta_size)
     polygon_list.append(ring_coords)
-
     return bin
 
 def polygon_decoder(bin, multipolygon_coords, delta_size):
@@ -53,15 +54,13 @@ def polygon_decoder(bin, multipolygon_coords, delta_size):
     multipolygon_coords.append(shapely.Polygon(shell=polygon_coords[0], holes=polygon_coords[1:]))
     return bin
 
-
 def decode_header(bin):
+    from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import intersection_skip_header
     delta_size, type, entropy_param = struct.unpack_from('!BBB', bin)
     type = GT(type)
-    algos.fpd_extended_lib.entropy_coder.decode_entropy_param(entropy_param, delta_size)
+    decode_entropy_param(entropy_param, delta_size)
     cfg.offset += 3 * 8 + 4 * FLOAT_SIZE  # Offset is 2 bytes for BBB + FLOAT_SIZE * 4 for bounding box
-    algos.fpd_extended_lib.intersection_chunk_bbox_wrapper.intersection_skip_header(bin) # Circular import
-
-
+    intersection_skip_header(bin) # Circular import
     return delta_size, type
 
 def fp_delta_decoding(bin_in):

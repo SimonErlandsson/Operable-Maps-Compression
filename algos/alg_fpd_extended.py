@@ -8,7 +8,7 @@ sys.path.append(str(root))
 from algos.base import CompressionAlgorithm
 from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import *
 from algos.fpd_extended_lib.add_vertex import *
-from algos.fpd_extended_lib.functions import *
+from algos.fpd_extended_lib.operations import *
 from algos.fpd_extended_lib.helpers import *
 from algos.fpd_extended_lib.compress import *
 from algos.fpd_extended_lib.decompress import *
@@ -65,9 +65,9 @@ def main():
     from shapely.geometry import shape
     from alg_fpd import Fpd
     x = FpdExtended()
-
     # geom1 = shapely.wkt.loads('POLYGON ((-24.3 10.48, -19.32 12.44, -15.3 14.2, -15.3 13.78, -15.3 13.9, -15.06 10.4, -17.44 11.38, -19.18 11.46, -14.82 9.08, -12.9 10.14, -12.08 7.86, -14.36 5.94, -15.92 8.34, -16.86 3.48, -19.38 4.4, -18.2 6.52, -20.08 7.4, -24.34 6.68, -24.24 8.66, -27.52 11.1,  -27.0 11.1, -24.3 10.48))')
     geom_fail = shapely.wkt.loads('POLYGON ((0 0, 10 10, 20 0, 0 0))')
+    geom_fail = shapely.wkt.loads('LINESTRING (13.1910431 55.6994554, 13.1910138 55.6994184, 13.1909466 55.6993319, 13.190586 55.6988615, 13.190429 55.69861, 13.190347 55.6984786, 13.1902698 55.6983562, 13.1902353 55.6982994, 13.1902089 55.6982553, 13.1900739 55.6980456, 13.1900441 55.6979916, 13.1900116 55.6979334)')
     geom1 = shapely.wkt.loads('LINESTRING (-24.3 10.48, -19.32 12.44, -15.3 14.2)')
     geom2 = shapely.wkt.loads('POLYGON ((-9.9 16.85, -5.95 17.67, -6.19 13.49, -9.81 12.74, -7.35 9.2, -6.82 6.19, -10 6, -12.36 5.75, -14.59 8.1, -12 10, -13.93 12.31, -17.35 12.45, -16.83 15.6, -20.45 14.6, -22.36 12, -22 9.37, -27.1 6.48, -30 11.7, -27.9 15.5, -21.46 17.26, -19.6 16.1, -14.77 17.6, -11.43 13.32, -9.9 16.85))')
 
@@ -84,7 +84,13 @@ def main():
     geom8 = shapely.wkt.loads('POLYGON ((13.1848537 55.7057363, 13.1848861 55.705646, 13.1848861 55.705646, 13.1848537 55.7057363), (13.1847425 55.7057123, 13.1847274 55.705711, 13.1847300 55.705712, 13.1847425 55.7057123))')
     from algos.fpd_extended_lib.entropy_coder import encode, decode
 
-
+    bin = x.compress(geom_fail)[1]
+    geom = x.decompress(bin)[1]
+    print(x.get_chunks(bin))
+    print(geom_fail)
+    print(geom)
+    
+    return
     import bench_utils
     K = 10
     diff_sum = 0

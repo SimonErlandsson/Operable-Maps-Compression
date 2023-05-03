@@ -26,7 +26,6 @@ def set_entropy_code(path):
                 total_deltas.append(delta)
                 deltas_by_bits[opt_size].append(uint_to_ba(delta, opt_size).to01())
         
-    if ENTROPY_METHOD == "Huffman" or cfg.AUTO_SELECT_METHOD:
         delta_freqs = __get_bit_seq_freqs(deltas_by_bits)
         codes = {}
         decode_trees = {}
@@ -45,15 +44,12 @@ def encode(msg, delta_len):
     elif ENTROPY_METHOD == "Golomb":
         return golomb_encode(msg)
         
-
-
 #decode also defined in low level (circular import)
 def decode(msg, delta_len):
     if ENTROPY_METHOD == "Huffman":
         return huffman_decode(msg, delta_len)
     elif ENTROPY_METHOD == "Golomb":
         return golomb_decode(msg, delta_len)            
-    
 
 #Huffman Encoding
 def huffman_decode(msg, delta_len):
@@ -190,53 +186,53 @@ def train_arith_model(model, dataset, iter = None):
 
 # Chunk based compression
 def compress_chunk(bits, chk_hdr_offset, delta_bytes_size):
-    chk_delta_offset = chk_hdr_offset + D_CNT_SIZE * 2 + 2 * FLOAT_SIZE
-    before_bits = bits[:chk_delta_offset]
-    coords_bits = bits[chk_delta_offset: chk_delta_offset +  delta_bytes_size]
-    comp_coords_bits = bitarray()
+    chk_dt_offset = chk_hdr_offset + D_CNT_SIZE + D_BITSIZE_SIZE + 2 * FLOAT_SIZE
+    before_bits = bits[:chk_dt_offset]
+    coords_bits = bits[chk_dt_offset:chk_dt_offset + delta_bytes_size]
+    comp_dt_bits = bitarray()
 
     if cfg.COMPRESSION_METHOD == "zlib":
-        comp_coords_bytes = zlib.compress(coords_bits.tobytes())
-        comp_coords_bits.frombytes(comp_coords_bytes)
+        comp_dt_bytes = zlib.compress(coords_bits.tobytes())
+        comp_dt_bits.frombytes(comp_dt_bytes)
 
     elif cfg.COMPRESSION_METHOD == "gzip":
-        comp_coords_bytes = gzip.compress(coords_bits.tobytes())
-        comp_coords_bits.frombytes(comp_coords_bytes)
+        comp_dt_bytes = gzip.compress(coords_bits.tobytes())
+        comp_dt_bits.frombytes(comp_dt_bytes)
 
     elif cfg.COMPRESSION_METHOD == "arith":
-        comp_coords_bits = bitarray()
-        comp_coords_bits.extend(cfg.ARITHMETIC_ENCODER.compress([int(x) for x in [*coords_bits.to01()]]))
+        comp_dt_bits = bitarray()
+        comp_dt_bits.extend(cfg.ARITHMETIC_ENCODER.compress([int(x) for x in [*coords_bits.to01()]]))
         
     else:
-        comp_coords_bytes = coords_bits.tobytes()
-        comp_coords_bits.frombytes(comp_coords_bytes)
+        comp_dt_bytes = coords_bits.tobytes()
+        comp_dt_bits.frombytes(comp_dt_bytes)
 
-    before_bits += comp_coords_bits
-    return before_bits, len(comp_coords_bits)
+    before_bits += comp_dt_bits
+    return before_bits, len(comp_dt_bits)
 
 
-def decompress_chunk(bits, chk_deltas_offset, deltas_bytes_size):
-    before_bits = bits[:chk_deltas_offset]
-    comp_coords_bits = bits[chk_deltas_offset: chk_deltas_offset + deltas_bytes_size]
-    after_bits = bits[chk_deltas_offset + deltas_bytes_size:]
+def decompress_chunk(bits, chk_dt_offset, chk_dt_bitsize):
+    before_bits = bits[:chk_dt_offset]
+    comp_dt_bits = bits[chk_dt_offset:chk_dt_offset + chk_dt_bitsize]
+    after_bits = bits[chk_dt_offset + chk_dt_bitsize:]
     decompressed_bits = bitarray()
 
     if cfg.COMPRESSION_METHOD == "zlib":
-        coords_bits = zlib.decompress(comp_coords_bits.tobytes())
+        coords_bits = zlib.decompress(comp_dt_bits.tobytes())
         decompressed_bits.frombytes(coords_bits)
 
     elif cfg.COMPRESSION_METHOD == "gzip":
-        coords_bits = gzip.decompress(comp_coords_bits.tobytes())
+        coords_bits = gzip.decompress(comp_dt_bits.tobytes())
         decompressed_bits.frombytes(coords_bits)
 
     elif cfg.COMPRESSION_METHOD == "arith":
-        indata = [int(x) for x in [*comp_coords_bits.to01()]]
+        indata = [int(x) for x in [*comp_dt_bits.to01()]]
         decompressed_bits.extend(cfg.ARITHMETIC_ENCODER.decompress(indata, len(indata)))
     else:
-        decompressed_bits = comp_coords_bits
+        decompressed_bits = comp_dt_bits
     
-    chk_header_offset = chk_deltas_offset - 2 * FLOAT_SIZE - 2 * D_CNT_SIZE
-    before_bits[chk_header_offset:chk_header_offset + D_CNT_SIZE] =  uint_to_ba(len(decompressed_bits), D_CNT_SIZE) 
+    chk_header_offset = chk_dt_offset - 2 * FLOAT_SIZE - D_BITSIZE_SIZE - D_CNT_SIZE
+    before_bits[chk_header_offset + D_CNT_SIZE:chk_header_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = uint_to_ba(len(decompressed_bits), D_BITSIZE_SIZE) 
 
     before_bits += decompressed_bits
     before_bits += after_bits

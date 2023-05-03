@@ -1,4 +1,4 @@
-from algos.fpd_extended_lib.functions import Funcs
+from algos.fpd_extended_lib.operations import Funcs
 from collections import deque
 import shapely
 import shapely.wkt

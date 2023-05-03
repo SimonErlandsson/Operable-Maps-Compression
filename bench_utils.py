@@ -1,12 +1,11 @@
 import shapely
 import json
+import random
+import pandas as pd
+import json
 
 def read_dataset(DATASET_PATH = "data/lund_building_highway.json", NBR_ITER = 16000):
-    import random
-    import pandas as pd
-    import json
     #DATASET_PATH = "data/world.json"
-
     # Extract the nested feature attribute of the geo_json file containing the geometries
     with open(DATASET_PATH, 'r') as f:
         data = json.loads(f.read())
