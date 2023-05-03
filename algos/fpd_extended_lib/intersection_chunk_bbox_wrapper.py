@@ -15,20 +15,29 @@ chunk_bboxes = []
 chunk_bounds_offset = -1
 
 def intersection_reserve_header(bits):
+    if DISABLE_OPTIMIZED_INTERSECTION:
+        return
     global chunk_bounds_offset, chunk_bboxes
     chunk_bounds_offset = len(bits)
     chunk_bboxes = []
 
 def intersection_new_chunk():
+    if DISABLE_OPTIMIZED_INTERSECTION:
+        return
     global chunk_bboxes
     chunk_bboxes.append([999.0, 999.0, -999.0, -999.0])
 
 def intersection_add_point(x, y, previous_chunk=False):
+    if DISABLE_OPTIMIZED_INTERSECTION:
+        return
     i = -2 if previous_chunk else -1
     x_l, y_b, x_r, y_t = chunk_bboxes[i]
     chunk_bboxes[i] = [min(x, x_l), min(y, y_b), max(x, x_r), max(y, y_t)]
 
 def intersection_append_header(bits):
+    if DISABLE_OPTIMIZED_INTERSECTION:
+        bits
+        
     left = bits[0:chunk_bounds_offset]
     left.extend(uint_to_ba(len(chunk_bboxes), 32))
     for bbox in chunk_bboxes:
@@ -39,6 +48,8 @@ def intersection_append_header(bits):
     return left
 
 def intersection_skip_header(bin):
+    if DISABLE_OPTIMIZED_INTERSECTION:
+        return
     chk_cnt = struct.unpack_from('!I', bin, offset=cfg.offset//8)[0]
     cfg.offset += 32 + 4 * FLOAT_SIZE * chk_cnt
 
@@ -57,11 +68,13 @@ def is_intersecting(self, args):
     from intersection.chunk_bbox_intersection import is_intersecting as intersects # Prevent circular import
     l_bin, r_bin = args
     s = time.perf_counter()
-
-    res = intersects(args)
-    # _, l_geo = self.decompress(l_bin)
-    # _, r_geo = self.decompress(r_bin)
-    # res = shapely.intersects(l_geo, r_geo)
+    
+    if not DISABLE_OPTIMIZED_INTERSECTION:
+        res = intersects(args)
+    else:
+        _, l_geo = self.decompress(l_bin)
+        _, r_geo = self.decompress(r_bin)
+        res = shapely.intersects(l_geo, r_geo)
 
     t = time.perf_counter()
     return t - s, res

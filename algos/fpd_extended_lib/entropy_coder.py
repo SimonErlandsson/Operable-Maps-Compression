@@ -150,7 +150,6 @@ def get_best_strategy(deltas, delta_size):
     else:
         return ("None", False, 0)
 
-            
 def decode_entropy_param(value, delta_size):
     if value == 0:
         cfg.USE_ENTROPY = False
@@ -162,7 +161,6 @@ def decode_entropy_param(value, delta_size):
         cfg.USE_ENTROPY = True
         cfg.ENTROPY_METHOD = "Golomb"
         cfg.ENTROPY_PARAM = value
-
 
 def train_arith_model(model, dataset, iter = None):
     import bench_utils, tqdm
