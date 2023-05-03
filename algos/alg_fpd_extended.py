@@ -86,7 +86,7 @@ def main():
 
     bin = x.compress(geom_fail)[1]
     geom = x.decompress(bin)[1]
-    print(x.get_chunks(bin))
+    #print(x.get_chunks(bin))
     print(geom_fail)
     print(geom)
     

@@ -50,7 +50,6 @@ def append_header(bits, geometry, d_size, deltas):
     bits.frombytes(double_to_bytes(bounds[3]))
     intersection_reserve_header(bits)
 
-
 def append_delta_pair(bits, d_x_zig, d_y_zig, d_size):
         x_bytes = uint_to_ba(d_x_zig, d_size)
         y_bytes = uint_to_ba(d_y_zig, d_size)
@@ -60,7 +59,6 @@ def append_delta_pair(bits, d_x_zig, d_y_zig, d_size):
         bits.extend(x_bytes)
         bits.extend(y_bytes)
         return (d_size, d_size) if not cfg.USE_ENTROPY else (len_x, len_y)
-
 
 def fp_delta_encoding(geometry, d_size, deltas):
     cfg.ENTROPY_STATE = (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY)
@@ -87,12 +85,6 @@ def fp_delta_encoding(geometry, d_size, deltas):
     num_chks_ring_idx = 0  # Pointer to latest 'number of chunks for ring'
     rem_points_ring = 0  # Cnt of 'points left to process in current ring'
 
-    intersection_chunk_bboxes = []
-    def intersection_add_point(x, y, previous_chunk=False):
-        i = -2 if previous_chunk else -1
-        x_l, y_b, x_r, y_t = intersection_chunk_bboxes[i]
-        intersection_chunk_bboxes[i] = [min(x, x_l), min(y, y_b), max(x, x_r), max(y, y_t)]
-
     # Loop all coordinates
     for x, y in shapely.get_coordinates(geometry):
         if not is_linestring and rem_points_ring == 1:  # Is the whole ring processed? We skip last coordinate
@@ -117,7 +109,8 @@ def fp_delta_encoding(geometry, d_size, deltas):
 
             ###### ---- INITIALIZE NEW CHUNK ----- ######
             chk_dt_cnt, chk_dt_bitsize = 0, 0
-            intersection_chunk_bboxes.append([x, y, x, y])
+            intersection_new_chunk()
+            intersection_add_point(x, y)
 
             ### __ RING/MULTI-POLYGON META-DATA __ ###
             if not is_linestring:
@@ -153,7 +146,6 @@ def fp_delta_encoding(geometry, d_size, deltas):
             (len_x, len_y) = append_delta_pair(bits, d_x_zig, d_y_zig, d_size)
             chk_dt_cnt += 1
             chk_dt_bitsize += len_x + len_y
-
             intersection_add_point(x, y)
 
         # Coord has been processed, remove it
@@ -166,9 +158,8 @@ def fp_delta_encoding(geometry, d_size, deltas):
 
     bits[chk_hdr_offset:chk_hdr_offset + D_CNT_SIZE] = uint_to_ba(chk_dt_cnt, D_CNT_SIZE)
     if cfg.COMPRESS_CHUNK:
-        print(chk_dt_bitsize, "comp")
         bits[chk_hdr_offset + D_CNT_SIZE:chk_hdr_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = uint_to_ba(chk_dt_bitsize, D_BITSIZE_SIZE)   
-    bits = intersection_append_header(bits, intersection_chunk_bboxes)
+    bits = intersection_append_header(bits)
     
     # util.pprint(bits)
     # print([int.from_bytes(i, 'big') for i in bytes], '\n')

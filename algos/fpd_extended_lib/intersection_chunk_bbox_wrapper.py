@@ -11,11 +11,24 @@ from bitarray import bitarray, util, bits2bytes
 import algos.fpd_extended_lib.cfg as cfg
 from algos.fpd_extended_lib.low_level import *
 
-def intersection_reserve_header(bits):
-    global chunk_bounds_offset
-    chunk_bounds_offset = len(bits)
+chunk_bboxes = []
+chunk_bounds_offset = -1
 
-def intersection_append_header(bits, chunk_bboxes):
+def intersection_reserve_header(bits):
+    global chunk_bounds_offset, chunk_bboxes
+    chunk_bounds_offset = len(bits)
+    chunk_bboxes = []
+
+def intersection_new_chunk():
+    global chunk_bboxes
+    chunk_bboxes.append([999.0, 999.0, -999.0, -999.0])
+
+def intersection_add_point(x, y, previous_chunk=False):
+    i = -2 if previous_chunk else -1
+    x_l, y_b, x_r, y_t = chunk_bboxes[i]
+    chunk_bboxes[i] = [min(x, x_l), min(y, y_b), max(x, x_r), max(y, y_t)]
+
+def intersection_append_header(bits):
     left = bits[0:chunk_bounds_offset]
     left.extend(uint_to_ba(len(chunk_bboxes), 32))
     for bbox in chunk_bboxes:
