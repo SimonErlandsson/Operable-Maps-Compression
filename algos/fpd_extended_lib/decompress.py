@@ -12,8 +12,9 @@ from algos.fpd_extended_lib.entropy_coder import decompress_chunk, decode_entrop
 
 # Structural things (per type):
 def sequence_decoder(bin, seq_list, delta_size):
+    LOAD_DT_BITSIZE = cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY
     chk_size = bytes_to_uint(bin, D_CNT_SIZE)
-    if cfg.COMPRESS_CHUNK:
+    if LOAD_DT_BITSIZE:
         delta_bytes_size = bytes_to_uint(bin, D_BITSIZE_SIZE)
 
     # Extract reset point

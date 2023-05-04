@@ -49,16 +49,16 @@ def vertices(self, bin_in):
 
         deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
 
-        if COMPRESS_CHUNK:
+        if COMPRESS_CHUNK or USE_ENTROPY:
             # Go through chunk (inlined sequence decode)
-            delta_bytes_size = bytes_to_uint(bin, D_CNT_SIZE)
+            delta_bytes_size = bytes_to_uint(bin, D_BITSIZE_SIZE)
 
         # Extract reset point
         x = bytes_to_double(bin)
         y = bytes_to_double(bin)
 
         if COMPRESS_CHUNK:
-            chk_deltas_offset = cfg.offset # = X
+            chk_deltas_offset = cfg.offset
             bin, coord_bit_len = decompress_chunk(bin, chk_deltas_offset, delta_bytes_size) 
    
         if chunks_in_ring_left == chunks_in_ring:

@@ -61,7 +61,7 @@ def append_delta_pair(bits, d_x_zig, d_y_zig, d_size):
         return (d_size, d_size) if not cfg.USE_ENTROPY else (len_x, len_y)
 
 def fp_delta_encoding(geometry, d_size, deltas):
-    cfg.ENTROPY_STATE = (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY)
+    STORE_DT_BITSIZE = cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY
     # List of resulting bytes.
     bits = bitarray(endian='big')
     # Init with 'd_size', 'geom_type'
@@ -105,6 +105,7 @@ def fp_delta_encoding(geometry, d_size, deltas):
                 bits[chk_hdr_offset:chk_hdr_offset + D_CNT_SIZE] = uint_to_ba(chk_dt_cnt, D_CNT_SIZE)
                 if cfg.COMPRESS_CHUNK: # Compress previous chunk
                     bits, chk_dt_bitsize = compress_chunk(bits, chk_hdr_offset, chk_dt_bitsize)
+                if STORE_DT_BITSIZE:
                     bits[chk_hdr_offset + D_CNT_SIZE:chk_hdr_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = uint_to_ba(chk_dt_bitsize, D_BITSIZE_SIZE)
 
             ###### ---- INITIALIZE NEW CHUNK ----- ######
@@ -134,7 +135,7 @@ def fp_delta_encoding(geometry, d_size, deltas):
             # Preparing chunk size (number of deltas)
             chk_hdr_offset = len(bits)
             bits.extend(uint_to_ba(0, D_CNT_SIZE)) # Reserve space for 'chk_dt_cnt'
-            if cfg.COMPRESS_CHUNK:
+            if STORE_DT_BITSIZE:
                 # Size of chunk is needed when variable-length compression is used
                 bits.extend(uint_to_ba(0, D_BITSIZE_SIZE)) # Reserve space for bit size of deltas
 
@@ -157,13 +158,12 @@ def fp_delta_encoding(geometry, d_size, deltas):
         bits, chk_dt_bitsize = compress_chunk(bits, chk_hdr_offset, chk_dt_bitsize)
 
     bits[chk_hdr_offset:chk_hdr_offset + D_CNT_SIZE] = uint_to_ba(chk_dt_cnt, D_CNT_SIZE)
-    if cfg.COMPRESS_CHUNK:
+    if STORE_DT_BITSIZE:
         bits[chk_hdr_offset + D_CNT_SIZE:chk_hdr_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = uint_to_ba(chk_dt_bitsize, D_BITSIZE_SIZE)   
     bits = intersection_append_header(bits)
     
     # util.pprint(bits)
     # print([int.from_bytes(i, 'big') for i in bytes], '\n')
-    (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY) = cfg.ENTROPY_STATE
     return bits.tobytes()
 
 def calculate_delta_size(geometry, return_deltas=False):
@@ -201,7 +201,9 @@ def calculate_delta_size(geometry, return_deltas=False):
 
 def compress(self, geometry):
     s = time.perf_counter()
+    cfg.ENTROPY_STATE = (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY)
     optimal_size, _, deltas = calculate_delta_size(geometry, True)
     bin = fp_delta_encoding(geometry, optimal_size, deltas[1])
+    (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY) = cfg.ENTROPY_STATE
     t = time.perf_counter()
     return t - s, bin
