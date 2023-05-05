@@ -14,6 +14,7 @@ from algos.fpd_extended_lib.entropy_coder import decompress_chunk, decode_entrop
 def sequence_decoder(bin, seq_list, delta_size):
     LOAD_DT_BITSIZE = cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY
     chk_size = bytes_to_uint(bin, D_CNT_SIZE)
+
     if LOAD_DT_BITSIZE:
         delta_bytes_size = bytes_to_uint(bin, D_BITSIZE_SIZE)
 
@@ -38,6 +39,7 @@ def sequence_decoder(bin, seq_list, delta_size):
 def ring_decoder(bin, polygon_list, delta_size):
     # Extract number of chunks for a ring
     chks_in_ring = bytes_to_uint(bin, RING_CHK_CNT_SIZE)
+
     ring_coords = []
     # Loop through chunks in ring
     for i in range(chks_in_ring):
@@ -60,7 +62,9 @@ def decode_header(bin):
     delta_size, type, entropy_param = struct.unpack_from('!BBB', bin)
     type = GT(type)
     decode_entropy_param(entropy_param, delta_size)
-    cfg.offset += 3 * 8 + 4 * FLOAT_SIZE  # Offset is 2 bytes for BBB + FLOAT_SIZE * 4 for bounding box
+    cfg.offset += 3 * 8  # Offset is 3 bytes for BBB + FLOAT_SIZE * 4 for bounding box
+    if not cfg.DISABLE_OPTIMIZED_BOUNDING_BOX:
+        cfg.offset += 4 * FLOAT_SIZE
     intersection_skip_header(bin) # Circular import
     return delta_size, type
 
@@ -70,7 +74,6 @@ def fp_delta_decoding(bin_in):
     bin.frombytes(bin_in)
 
     delta_size, type = decode_header(bin)
-
     cfg.binary_length = len(bin)
     coords = []
     if type == GT.LINESTRING:

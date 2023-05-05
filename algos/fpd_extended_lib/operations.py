@@ -98,9 +98,12 @@ def type(self, bin):
 
 def bounding_box(self, bin):
     s = time.perf_counter()
-    bounds = []
-    res = bitarray()
-    res.frombytes(bin)
-    bounds = [bin_to_double(res[3 * 8 + FLOAT_SIZE * i: 3 * 8 + FLOAT_SIZE * (i + 1)]) for i in range(4)]
+    if not DISABLE_OPTIMIZED_BOUNDING_BOX:
+        res = bitarray()
+        res.frombytes(bin)
+        bounds = [bin_to_double(res[3 * 8 + FLOAT_SIZE * i: 3 * 8 + FLOAT_SIZE * (i + 1)]) for i in range(4)]
+    else:
+        _, geometry = self.decompress(bin)
+        bounds = shapely.bounds(geometry)
     t = time.perf_counter()
     return t - s, bounds

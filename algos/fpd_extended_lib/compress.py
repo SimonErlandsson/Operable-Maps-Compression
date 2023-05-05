@@ -43,11 +43,12 @@ def append_header(bits, geometry, d_size, deltas):
     bits.frombytes(uchar_to_bytes(int(shapely.get_type_id(geometry))))  # 1 byte is enough for storing type
     bits.frombytes(uchar_to_bytes(cfg.ENTROPY_PARAM))
     # Bounding Box
-    bounds = shapely.bounds(geometry)
-    bits.frombytes(double_to_bytes(bounds[0]))
-    bits.frombytes(double_to_bytes(bounds[1]))
-    bits.frombytes(double_to_bytes(bounds[2]))
-    bits.frombytes(double_to_bytes(bounds[3]))
+    if not DISABLE_OPTIMIZED_BOUNDING_BOX:
+        bounds = shapely.bounds(geometry)
+        bits.frombytes(double_to_bytes(bounds[0]))
+        bits.frombytes(double_to_bytes(bounds[1]))
+        bits.frombytes(double_to_bytes(bounds[2]))
+        bits.frombytes(double_to_bytes(bounds[3]))
     intersection_reserve_header(bits)
 
 def append_delta_pair(bits, d_x_zig, d_y_zig, d_size):
@@ -163,7 +164,7 @@ def fp_delta_encoding(geometry, d_size, deltas):
     bits = intersection_append_header(bits)
     
     # util.pprint(bits)
-    # print([int.from_bytes(i, 'big') for i in bytes], '\n')
+    #print([int.from_bytes(i, 'big') for i in bits.tobytes()], '\n')
     return bits.tobytes()
 
 def calculate_delta_size(geometry, return_deltas=False):
