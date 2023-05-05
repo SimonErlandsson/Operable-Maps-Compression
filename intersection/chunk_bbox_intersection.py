@@ -148,7 +148,6 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
     cross_to_seg = [[[], []] for _ in range(len(intersecting_points))]
     for s in range(2):
         segments[s] = [[c[i], c[i+1]] for c in chks[s] for i in range(len(c) - 1)]
-
         # Find which segments contain intersecting points
         for seg_idx, seg in enumerate(segments[s]):
             for p_idx, p in enumerate(intersecting_points):
@@ -160,6 +159,8 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
                 # else:
                 #     plot_geometry(shapely.LineString(seg), solid=False)
             seg_to_cross[s][seg_idx].sort(key=lambda x: np.linalg.norm(segments[s][seg_idx][0] - intersecting_points[x])) # Sort ordered by distance from p[0]
+    plt.show()
+        
     res_list.append(segments)
     res_list.append(seg_to_cross)
     res_list.append(cross_to_seg)
@@ -229,7 +230,7 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
     def DEBUG_print_paths(paths, c_i=None):
         if c_i != None:
             print(f"--: {intersecting_points[c_i]} :--")
-        print("Raw:", paths)
+        #print("Raw:", paths)
         str = ""
         for p in paths:
             s, seg_idx, v_idxs, p_dir = p
@@ -263,8 +264,7 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
         # Make sure points are within both shapes
         possible_paths = list(filter(lambda p: is_contained_within(seg_to_middle_point(*p[0:3]), bins[(p[0] + 1) % 2]), possible_paths))
         # print("")
-        # DEBUG_print_paths(possible_paths)
-        # print("---")
+        #DEBUG_print_paths(possible_paths)
         return possible_paths
 
 
@@ -273,13 +273,15 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
     cross_left = set(range(len(intersecting_points))) # Ids of unprocessed intersection points
     processed_ways = [[set(), set()] for _ in range(len(intersecting_points))] # Avoid processing visited segments
     res_segs = deque() # Segments which are part of the resulting shape
+    res_points = []
     while len(cross_left) > 0:
         c_i = cross_left.pop() # Take one cross-point
         paths = possible_paths(c_i) # Find possible paths from the cross-point
-        # if len(paths) == 0:
-        #     print("FOUND POINT INTERSECTION")
+        if len(paths) == 0:
+            res_points.append(intersecting_points[c_i])
         while len(paths) > 0:
             path = paths.pop() # Process one path
+
             s, seg_idx, v_idxs, p_dir = path # V_idxs contains: start_idx, end_index. Can also be cross-points!
             start_idx = 0 if p_dir == 1 else 1 # Start index. Avoids creating segments which are flipped
             end_idx = 1 if p_dir == 1 else 0
@@ -298,10 +300,11 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
                     encountered_c_idx = seg_to_cross[s][seg_idx][e_v - 2] # Find cross_idx of collided cross-point
                     processed_ways[encountered_c_idx][s].add(seg_idx) # Add to shape's list for the cross-point
                     break
-                elif next_seg_idx == -1 or seg_idx == len(segments[s]) or not np.array_equal(seg_to_point(s, seg_idx, e_v), seg_to_point(s, seg_idx, start_idx)):
+                elif next_seg_idx == -1 or next_seg_idx == len(segments[s]) or not np.array_equal(seg_to_point(s, seg_idx, e_v), seg_to_point(s, next_seg_idx, start_idx)): #<- HERE ERROR
                     break # Break if no more segments, or if path formed by segments is not continuous
                 else:
                     seg_idx = next_seg_idx # Next segment
+
                     seg_cross_cnt = len(seg_to_cross[s][seg_idx])
                     if p_dir == 1:
                         v_idxs = [0, 2 if seg_cross_cnt != 0 else 1] # Has next line-segment crosspoint? If so take the first cross point as segment end-point.
@@ -317,16 +320,43 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
                 res_segs = path_segs 
 
 
-    # create_canvas()
-    # #plot_intersecting_points()
-    # for p1, p2 in res_segs:
-    #     plot_intersecting_points([p1, p2])
-    #     plot_line(p1, p2)
+    #Merge all segments into LineString or MultiLineString
+    unfilt_line_strs = shapely.ops.linemerge(res_segs)
+    type_unfilt = unfilt_line_strs.geom_type
+    unfilt_line_strs = [unfilt_line_strs] if type_unfilt == "LineString" else list(unfilt_line_strs.geoms) #For making MultiLineString and LineString be handleded similarly
 
+    #List of all resulting linestrings and polygons
+    line_strs, polygons = [], []
 
-    # plot_geometry(fpd.decompress(bins[0])[1], solid=False)
-    # plot_geometry(fpd.decompress(bins[1])[1], solid=False)
+    #Check if LineString has the shape of a polygon, then convert it and divide polygons and line strings
+    for line_str in unfilt_line_strs:
+        if line_str.is_ring:
+            polygons.append(shapely.Polygon(line_str.coords))
+        else:
+            line_strs.append(line_str)
 
-    # plt.show()
-    # print("RES", res_segs)
+    #Variables for different cases of geometries
+    is_MultiLineString, is_MultiPolygon, is_MultiPoint = len(line_strs) > 1, len(polygons) > 1, len(res_points) > 1
+    has_LineString, has_Polygon, has_Point = len(line_strs) > 0, len(polygons) > 0, len(res_points) > 0
+
+    result = []
+    if is_MultiLineString:
+        result.append(shapely.MultiLineString(line_strs))
+    if is_MultiPolygon:
+        result.append(shapely.MultiPolygon(polygons))
+    if is_MultiPoint:
+        result.append(shapely.MultiPoint(res_points))
+    if not is_MultiLineString and has_LineString:
+        result.append(line_strs[0])
+    if not is_MultiPolygon and has_Polygon:
+        result.append(polygons[0])
+    if not is_MultiPoint and has_Point:
+        result.append(shapely.Point(res_points[0]))
+
+    if len(result) > 1:
+        return shapely.GeometryCollection(result)
+    
+    elif len(result) == 1:
+        return result[0]
+
     return res_segs

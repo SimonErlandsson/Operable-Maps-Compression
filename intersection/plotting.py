@@ -35,16 +35,17 @@ def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True, alpha=1.0):
     if SHOW_GEOMETRIES:
         geom_type = shapely.get_type_id(geom)
         rings = []
-        if geom_type == GT.LINESTRING or geom_type == GT.POINT:
+        if geom_type == GT.LINESTRING or geom_type == GT.POINT or geom_type == GT.MULTILINESTRING or geom_type == GT.MULTIPOINT:
             pts = shapely.get_coordinates(geom)
             rings = [(False, pts)]
         else:
             shps = [geom] if shapely.get_type_id(geom) == GT.POLYGON else geom.geoms
             for shp in shps:
                 shp_type = shapely.get_type_id(shp)
-                if shp_type == GT.LINESTRING or shp_type == GT.POINT:
+                if shp_type == GT.LINESTRING or shp_type == GT.POINT or shp_type == GT.MULTILINESTRING or shp_type == GT.MULTIPOINT:
                     pts = shapely.get_coordinates(geom)
                     rings += [(False, pts)]
+                
                 else:
                     exterior_coords = list(shp.exterior.coords)
                     interior_coords = [list(interior.coords) for interior in shp.interiors]
@@ -117,9 +118,8 @@ def calculate_chunks_bounds(bin, include_next_chunk_start=True):
         chunks_vertices.append((xs, ys))
     return chunks_bounds, chunks_vertices
 
-def create_canvas():
+def create_canvas(zoom=2.5):
     fig = plt.figure()
-    zoom = 2.5
     w, h = fig.get_size_inches()
     fig.set_size_inches(w * zoom, h * zoom)
 

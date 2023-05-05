@@ -24,7 +24,7 @@ def read_dataset(DATASET_PATH = "data/lund_building_highway.json"):
     random.seed(SEED) # Reset random
     return df, unary_idxs
 
-def parse_intersection_data(file_name, max_shps=999999999):
+def parse_intersection_data(file_name, max_shps=999999999, strip_precision=False):
     geom_pairs = []
     geom_stats = []
     if file_name.endswith('.json'):
@@ -34,6 +34,9 @@ def parse_intersection_data(file_name, max_shps=999999999):
             type = data[i]
             p1 = shapely.from_wkt(data[i + 1])
             p2 = shapely.from_wkt(data[i + 2])
+            if strip_precision:
+                p1 = shapely.from_wkt(shapely.to_wkt(p1, rounding_precision=7))
+                p2 = shapely.from_wkt(shapely.to_wkt(p1, rounding_precision=7))
             intersects = data[i + 3]
             geom_pairs.append((p1, p2))
             geom_stats.append((type, intersects))

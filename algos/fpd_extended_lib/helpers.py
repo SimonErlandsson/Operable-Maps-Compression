@@ -8,7 +8,7 @@ from algos.fpd_extended_lib.low_level import *
 from algos.fpd_extended_lib.decompress import *
 
 
-def get_chunks(bin_in, include_ring_start=True):
+def get_chunks(bin_in, include_next_start=True):
     """
     Only used for non-timed operations, i.e. debugging/testing implementations
     # NOTE: Can also return the first ring coordinate when reaching end of ring!
@@ -44,6 +44,9 @@ def get_chunks(bin_in, include_ring_start=True):
         y = bytes_to_double(bin)
         if chunks_in_ring_left == chunks_in_ring:
             x_ring, y_ring = (x, y)
+        elif include_next_start:
+            # Append first coord next chunk
+            chunks[-1].append([x, y])
 
         chunk = [[x, y]]
         # Loop through deltas in chunk
@@ -55,7 +58,7 @@ def get_chunks(bin_in, include_ring_start=True):
         is_last_ring_chunk.append(False)
         chunks_in_ring_left -= 1
         if chunks_in_ring_left == 0:
-            if include_ring_start:
+            if include_next_start:
                 chunks[-1].append([x_ring, y_ring])
             rings_left -= 1
             is_last_ring_chunk[-1] = True
@@ -105,13 +108,14 @@ def random_access(bin_in, idx, cache, get_chunk=False):
             chk, cache = access_vertex_chk(bin, deltas_in_chunk_offset, delta_size, cache=cache, list_vertices=True)
 
             # Chunks should contain next point for overlapping bboxes
-            if not is_linestring:
-                if chunks_in_ring_left == 1:
-                    # Was last chunk in ring, append start
-                    next_chk_offset = ring_start_offset
-                else:
-                    # Append next chunk start
-                    next_chk_offset = cfg.offset + FLOAT_SIZE * 2 + delta_size * 2 * deltas_in_chunk
+            if not is_linestring and chunks_in_ring_left == 1:
+                # Was last chunk in ring, append start
+                next_chk_offset = ring_start_offset
+            else:
+                # Append next chunk start
+                next_chk_offset = cfg.offset + FLOAT_SIZE * 2 + delta_size * 2 * deltas_in_chunk
+            # Avoid reading if EOF
+            if next_chk_offset + cfg.EOF_THRESHOLD < len(bin):
                 next_vert, cache = access_vertex_chk(bin, next_chk_offset, delta_size, 0, cache)
                 chk.append(next_vert)
             cfg.offset = old_offset
@@ -139,7 +143,7 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
     within the chunk, up until and including idx.
     """
     old_offset = cfg.offset
-    cfg.offset = chk_offset + D_CNT_SIZE #skips delta bytes
+    cfg.offset = chk_offset + D_CNT_SIZE #skips delta bytes 
     deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
     if idx == None:
         idx = deltas_in_chunk
