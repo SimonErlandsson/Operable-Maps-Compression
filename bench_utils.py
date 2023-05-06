@@ -4,7 +4,7 @@ import random
 import pandas as pd
 import json
 
-def read_dataset(DATASET_PATH = "data/lund_building_highway.json", NBR_ITER = 16000):
+def read_dataset(DATASET_PATH = "data/lund_building_highway.json", NBR_ITER = -1):
     #DATASET_PATH = "data/world.json"
     # Extract the nested feature attribute of the geo_json file containing the geometries
     with open(DATASET_PATH, 'r') as f:
@@ -14,8 +14,11 @@ def read_dataset(DATASET_PATH = "data/lund_building_highway.json", NBR_ITER = 16
     df = pd.DataFrame(
         {'type': file_df['geometry.type'], 'coordinates': file_df['geometry.coordinates']})
 
-    max_idx = len(df) - 1
-    unary_idxs = [random.randint(0, max_idx) for i in range(NBR_ITER)] # Generate list of indexes to query on
+    if NBR_ITER != -1:
+        max_idx = len(df) - 1
+        unary_idxs = [random.randint(0, max_idx) for i in range(NBR_ITER)] # Generate list of indexes to query on
+    else:
+        unary_idxs = list(range(len(df)))
     return df, unary_idxs
 
 def parse_intersection_data(file_name, max_shps=999999999):
