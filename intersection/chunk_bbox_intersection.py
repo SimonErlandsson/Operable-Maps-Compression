@@ -279,14 +279,15 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
 
         possible_paths = list(filter(lambda p: is_contained_within(seg_to_middle_point(*p[0:3]), bins[(p[0] + 1) % 2]), possible_paths))
         paths_to_save.update(possible_paths)
+        
         possible_paths = list(paths_to_save)
         
-        #print("")
-        #DEBUG_print_paths(list(paths_to_save))
-        #DEBUG_print_paths(possible_paths, c_i)
-        # Make sure points are within both shapes
         # print("")
-        #DEBUG_print_paths(possible_paths)
+        # DEBUG_print_paths(list(paths_to_save))
+        # DEBUG_print_paths(possible_paths, c_i)
+        # #Make sure points are within both shapes
+        # print("")
+        # DEBUG_print_paths(possible_paths)
         return possible_paths
 
 
@@ -296,6 +297,7 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
     processed_ways = [[set(), set()] for _ in range(len(intersecting_points))] # Avoid processing visited segments
     res_segs = deque() # Segments which are part of the resulting shape
     res_points = []
+    visited_edges = set()
     while len(cross_left) > 0:
         c_i = cross_left.pop() # Take one cross-point
         paths = possible_paths(c_i) # Find possible paths from the cross-point
@@ -310,11 +312,15 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
 
             if seg_idx in processed_ways[c_i][s]: # Skip processed
                 continue
-
+            
             path_segs = deque()
             path_append = path_segs.append if p_dir == 1 else lambda x: path_segs.insert(0, x)
             while True: # While no cross point
-                path_append([seg_to_point(s, seg_idx, v_idxs[0]), seg_to_point(s, seg_idx, v_idxs[1])]) # Add segment to resulting shape
+                if not str([seg_to_point(s, seg_idx, v_idxs[0]), seg_to_point(s, seg_idx, v_idxs[1])]) in visited_edges and not str([seg_to_point(s, seg_idx, v_idxs[1]), seg_to_point(s, seg_idx, v_idxs[0])]) in visited_edges:     
+                    path_append([seg_to_point(s, seg_idx, v_idxs[0]), seg_to_point(s, seg_idx, v_idxs[1])]) # Add segment to resulting shape
+                    visited_edges.add(str([seg_to_point(s, seg_idx, v_idxs[0]), seg_to_point(s, seg_idx, v_idxs[1])]))
+                    visited_edges.add(str([seg_to_point(s, seg_idx, v_idxs[1]), seg_to_point(s, seg_idx, v_idxs[0])]))
+
                 e_v = v_idxs[end_idx] # Find index of actual end vertex (i.e. flip segment based on direction)
 
                 next_seg_idx = seg_idx + p_dir
