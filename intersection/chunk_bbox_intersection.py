@@ -122,6 +122,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
         polylines[i] = [chunk_to_shape(c) for c in chks[i]] # Transform each chunk to polyline
 
     intersecting_points = []
+    intersecting_points_set = set() #To not have duplicates
 
     for i in polylines[0]:
         for j in polylines[1]:
@@ -136,8 +137,11 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
                 # END ----------------------
                 if res_list == None: # If doing predicate, return here. Else save point
                     return True
-                intersecting_points += list(shapely.get_coordinates(i.intersection(j)))
-
+                intersect_points = list(shapely.get_coordinates(i.intersection(j)))
+                for point in intersect_points: 
+                    if str(point) not in intersecting_points_set:
+                        intersecting_points.append(point)
+                        intersecting_points_set.add(str(point))
     if len(intersecting_points) == 0:
         return False
 
@@ -260,9 +264,27 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
                 if not np.array_equal(seg_to_point(s, seg_idx, c_i_in_seg), seg_to_point(s, seg_idx, end_v)):
                     possible_paths.append((s, seg_idx, (c_i_in_seg, end_v), 1)) # Vertex 2 being the first cross, 0 is first in shape order
 
+        paths_to_save = set()
+        for i in range(len(possible_paths)):
+            for j in range(len(possible_paths)):
+                if j != i:
+                    s1, seg_idx1, v_idxs1, _ = possible_paths[i]
+                    s2, seg_idx2, v_idxs2, _ = possible_paths[j]
+                    path1 = shapely.LineString([seg_to_point(s1, seg_idx1, v_idxs1[0]), seg_to_point(s1, seg_idx1, v_idxs1[1])])
+                    path2 = shapely.LineString([seg_to_point(s2, seg_idx2, v_idxs2[0]), seg_to_point(s2, seg_idx2, v_idxs2[1])])
+                    if path1.intersection(path2).geom_type == "LineString":
+                        paths_to_save.add(possible_paths[i])
+                        paths_to_save.add(possible_paths[j])
+                        
+
+        possible_paths = list(filter(lambda p: is_contained_within(seg_to_middle_point(*p[0:3]), bins[(p[0] + 1) % 2]), possible_paths))
+        paths_to_save.update(possible_paths)
+        possible_paths = list(paths_to_save)
+        
+        #print("")
+        #DEBUG_print_paths(list(paths_to_save))
         #DEBUG_print_paths(possible_paths, c_i)
         # Make sure points are within both shapes
-        possible_paths = list(filter(lambda p: is_contained_within(seg_to_middle_point(*p[0:3]), bins[(p[0] + 1) % 2]), possible_paths))
         # print("")
         #DEBUG_print_paths(possible_paths)
         return possible_paths
