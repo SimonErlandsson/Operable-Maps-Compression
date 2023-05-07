@@ -2,7 +2,21 @@ import shapely
 import json
 import random
 import pandas as pd
+import geopandas as gpd
+import glob
+import tqdm
 import json
+
+def load_shp_files(base_loc):
+    df = gpd.GeoDataFrame()
+    files = glob.glob(base_loc + '/*.shp')
+    for i in tqdm.tqdm(range(len(files))):
+        f = files[i]
+        print(i + 1, ':', f)
+        to_append = gpd.read_file(f)
+        print(i + 1, 'contains', len(to_append), 'geometries')
+        df = gpd.pd.concat([df, to_append], copy=False)
+    return df, list(range(len(df)))
 
 def read_dataset(DATASET_PATH = "data/lund_building_highway.json", NBR_ITER = -1):
     #DATASET_PATH = "data/world.json"
