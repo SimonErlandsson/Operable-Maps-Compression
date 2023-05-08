@@ -113,7 +113,7 @@ def random_access(bin_in, idx, cache, get_chunk=False):
                 next_chk_offset = ring_start_offset
             else:
                 # Append next chunk start
-                next_chk_offset = cfg.offset + FLOAT_SIZE * 2 + delta_size * 2 * deltas_in_chunk
+                next_chk_offset = cfg.offset + FLOAT_SIZE * 2 + deltas_bytes_in_chunk
             # Avoid reading if EOF
             if next_chk_offset + cfg.EOF_THRESHOLD <= len(bin):
                 next_vert, cache = access_vertex_chk(bin, next_chk_offset, delta_size, 0, cache)
