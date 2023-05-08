@@ -83,7 +83,7 @@ def random_access(bin_in, idx, cache, get_chunk=False):
     cfg.offset = 0
     bin = bitarray(endian='big')
     bin.frombytes(bin_in)
-
+    cfg.binary_length = len(bin)
     delta_size, type = decode_header(bin)
 
     # Type specific variables
@@ -113,9 +113,9 @@ def random_access(bin_in, idx, cache, get_chunk=False):
                 next_chk_offset = ring_start_offset
             else:
                 # Append next chunk start
-                next_chk_offset = cfg.offset + FLOAT_SIZE * 2 + delta_size * 2 * deltas_in_chunk
+                next_chk_offset = cfg.offset + FLOAT_SIZE * 2 + deltas_bytes_in_chunk
             # Avoid reading if EOF
-            if next_chk_offset + cfg.EOF_THRESHOLD <= len(bin):
+            if next_chk_offset + cfg.EOF_THRESHOLD <= cfg.binary_length:
                 next_vert, cache = access_vertex_chk(bin, next_chk_offset, delta_size, 0, cache)
                 chk.append(next_vert)
             cfg.offset = old_offset
