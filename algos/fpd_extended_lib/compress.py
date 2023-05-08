@@ -139,6 +139,11 @@ def fp_delta_encoding(geometry, d_size, deltas):
                 else:
                     num_chks_ring += 1
                     intersection_add_point(x, y, previous_chunk=True)
+                    
+             #add next chunks first point to bounding box
+            if is_linestring and len(intersection_chunk_bboxes) > 1:
+                intersection_add_point(x, y, previous_chunk=True)
+
             ### __ ------------ END ------------- __ ###
 
             # Preparing chunk size (number of deltas)
