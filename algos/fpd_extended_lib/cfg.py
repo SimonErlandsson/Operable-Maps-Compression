@@ -12,9 +12,9 @@ GOLOMB_MIN_BRUTEFORCE = False
 # Size of data-structures
 FLOAT_SIZE = 64 if USE_DEFAULT_DOUBLE else 32
 EXPONENT = 6
-D_BITSIZE_SIZE = 20 # Size used to store the size of the chunks OPTIMIZE
-POLY_RING_CNT_SIZE = required_bits(255)
-RING_CHK_CNT_SIZE = 12
+D_BITSIZE_SIZE = 64 # Size used to store the size of the chunks OPTIMIZE
+POLY_RING_CNT_SIZE = required_bits(2048)
+RING_CHK_CNT_SIZE = 30
 MAX_NUM_DELTAS = 31  # Max number of deltas in a chunk before split
 D_CNT_SIZE = required_bits(MAX_NUM_DELTAS + 1)
 
