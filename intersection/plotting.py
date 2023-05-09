@@ -140,11 +140,11 @@ def plot_chunks_bounds(bin_in, include_next_chunk_start=False, avoid_create_fram
         chunk_color = (np.random.random(), np.random.random(), np.random.random())
         inverse_chunk_color = (1 - chunk_color[0], 1 - chunk_color[1], 1 - chunk_color[2])
         plot_bounds(chunk_bounds, color=chunk_color, solid=solid)
-        plt.fill(x_bounds, y_bounds, color=chunk_color, alpha=0.05)
+        plt.fill(x_bounds, y_bounds, color=chunk_color, alpha=0.02)
         plt.scatter(xs, ys, s=10, color=inverse_chunk_color)
 
     _, geom = fpd.decompress(bin_in)
-    plot_geometry(geom)
+    plot_geometry(geom, alpha=0.2)
 
     plt.title(("Chunk Bounds" if not include_next_chunk_start else "Chunk Bounds - With Connecting Borders") + str(txt))
     if not avoid_show:
