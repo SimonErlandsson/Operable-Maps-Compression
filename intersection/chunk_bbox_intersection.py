@@ -13,12 +13,12 @@ import bisect
 
 
 fpd = FpdExtended()
-@profile
-def is_bbox_intersecting(bbox_1, bbox_2):
-    bbox = [max(bbox_1[0], bbox_2[0]), max(bbox_1[1], bbox_2[1]), min(bbox_1[2], bbox_2[2]), min(bbox_1[3], bbox_2[3])]
-    return bbox[2] >= bbox[0] and bbox[3] >= bbox[1]
 
-@profile
+#@profile
+def is_bbox_intersecting(bbox_1, bbox_2):
+    return min(bbox_1[2], bbox_2[2]) >= max(bbox_1[0], bbox_2[0]) and min(bbox_1[3], bbox_2[3]) >= max(bbox_1[1], bbox_2[1])
+
+#@profile
 def common_bbox(bins):  # Returns lower left corner, upper right corner in 1D array
     x_l_1, y_b_1, x_r_1, y_t_1 = fpd.bounding_box(bins[0])[1]  # Left, bottom, right, top
     x_l_2, y_b_2, x_r_2, y_t_2 = fpd.bounding_box(bins[1])[1]
@@ -50,7 +50,7 @@ def common_bbox(bins):  # Returns lower left corner, upper right corner in 1D ar
 
 #chunks_bounds, _ = calculate_chunks_bounds(bin)
 # --------- /END/ METHODS REQUIRING IMPLEMENTATIONS IN FPDE ---------------
-@profile
+#@profile
 def get_chunks_idxs_within_bounds(bin, bbox, get_geom_bounds=False):
     chunks_bounds = fpd.get_chunk_bounds(bin)
     chk_idxs = [i for i in range(len(chunks_bounds)) if is_bbox_intersecting(bbox, chunks_bounds[i])]
@@ -59,11 +59,11 @@ def get_chunks_idxs_within_bounds(bin, bbox, get_geom_bounds=False):
 
 get_chunk = lambda bin, idx: fpd.get_chunk(bin, idx)[0] # Can also use slow above for debugging
 
-@profile
+#@profile
 def chunk_to_shape(chk): return shapely.Point(chk[0]) if len(chk) == 1 else shapely.LineString(chk)
 
-@profile
-def is_contained_within(containee, container, container_bounds, debug_correct_ans=None, plot_all=False):
+#@profile
+def is_contained_within(containee, container, container_bounds, debug_correct_ans=None, plot_all=False, cache=None):
     '''
     Containee is either FPDE binary object or a tuple of coordinates.
     '''
@@ -89,10 +89,21 @@ def is_contained_within(containee, container, container_bounds, debug_correct_an
 
     if OPTIMIZED_INTERSECTION:
         chks = [idx for idx, bound in container_bounds.items() if is_bbox_intersecting(ray_bound, bound)]
+        if cache != None:
+            segments = []
+            for c in chks:
+                if c not in cache:
+                    chunk_shape = chunk_to_shape(get_chunk(container, c))
+                    cache[c] = chunk_shape
+                    segments.append(chunk_shape)
+                else:
+                    segments.append(cache[c])
+        else:
+            segments = [chunk_to_shape(get_chunk(container, c)) if c not in cache else cache[c] for c in chks]
     else:
-        chks = [i for i in range(len(container_bounds)) if is_bbox_intersecting(ray_bound, container_bounds[i])]
+        chks = get_chunks_idxs_within_bounds(container, ray_bound)
+        segments = [chunk_to_shape(get_chunk(container, c)) if c not in cache else cache[c] for c in chks]
 
-    segments = [chunk_to_shape(get_chunk(container, c)) for c in chks]
     
     intersecting_points = []
     for i in segments:
@@ -112,7 +123,7 @@ def is_contained_within(containee, container, container_bounds, debug_correct_an
     #     plot_chunks_bounds(containee, include_next_chunk_start=False, avoid_create_frame=True, idxs=[], txt=f" : was {len(intersecting_points) % 2 == 1} expected {debug_correct_ans}")
     # END DEBUG
     return len(intersecting_points) % 2 == 1
-@profile
+#@profile
 def is_point_on_segment(seg, pt):
     if  OPTIMIZED_INTERSECTION:
         x, y = pt
@@ -139,7 +150,7 @@ def is_point_on_segment(seg, pt):
 
 # Based on the common bbox, extracts the chunks for both geometries within the bbox,
 # and performs intersection testing between the line segments.
-@profile
+#@profile
 def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=False):
     #General variables for whole geometries
     bounds =  [[], []]
@@ -255,8 +266,9 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
 
 
 
-@profile
+#@profile
 def is_intersecting(bins, debug_correct_ans=None, plot_all=False):
+    cache = [{},{}]
     bbox, overlap_type = common_bbox(bins)
     if bbox == None:
         return False
@@ -273,13 +285,14 @@ def is_intersecting(bins, debug_correct_ans=None, plot_all=False):
     #    - Possibly pick point closest to other polygon's bounding box
 
     if overlap_type == '1 in 2':
-        return is_contained_within(bins[0], bins[1], bounds[1], debug_correct_ans=debug_correct_ans, plot_all=plot_all)
+        return is_contained_within(bins[0], bins[1], bounds[1], debug_correct_ans=debug_correct_ans, plot_all=plot_all,cache=cache[1])
     elif overlap_type == '2 in 1':
-        return is_contained_within(bins[1], bins[0], bounds[0], debug_correct_ans=debug_correct_ans, plot_all=plot_all)
+        return is_contained_within(bins[1], bins[0], bounds[0], debug_correct_ans=debug_correct_ans, plot_all=plot_all, cache=cache[0])
     return False
 
-@profile
+#@profile
 def intersection(bins, debug_correct_ans=None, plot_all=False):
+    cache = [{},{}]
     bbox, overlap_type = common_bbox(bins)
     if bbox == None:
         return shapely.Polygon(None)
@@ -295,9 +308,9 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
     #    - Possibly pick point closest to other polygon's bounding box
     if len(line_data) == 0:
         _, bounds = result
-        if overlap_type == '1 in 2' and is_contained_within(bins[0], bins[1], bounds[1], debug_correct_ans=debug_correct_ans, plot_all=plot_all):
+        if overlap_type == '1 in 2' and is_contained_within(bins[0], bins[1], bounds[1], debug_correct_ans=debug_correct_ans, plot_all=plot_all, cache=cache[1]):
             return fpd.decompress(bins[0])[1] # Return whole smaller shape
-        elif overlap_type == '2 in 1' and is_contained_within(bins[1], bins[0], bounds[0], debug_correct_ans=debug_correct_ans, plot_all=plot_all):
+        elif overlap_type == '2 in 1' and is_contained_within(bins[1], bins[0], bounds[0], debug_correct_ans=debug_correct_ans, plot_all=plot_all, cache=cache[0]):
             return fpd.decompress(bins[1])[1]
         return shapely.Polygon(None)
 
@@ -333,7 +346,7 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
 
 
     # Returns the possible paths (directed segment) from an intersection point. Also checks that it is within both shapes.
-    @profile
+    #@profile
     def possible_paths(c_i, bounds):
         possible_paths = []
         seg_idxs = cross_to_seg[c_i]
@@ -346,30 +359,37 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
 
                 # Get previous cross point if exists
                 start_v = c_i_in_seg - 1 if c_i_in_seg != 2 else 0 # V:0 left of segment, V:1 right in segment, V:2+ intersection points
-                if not np.array_equal(seg_to_point(s, seg_idx, start_v), seg_to_point(s, seg_idx, c_i_in_seg)): # Dont add line segments consisting of one point
+                
+                refactored_path = seg_to_point(s, seg_idx, c_i_in_seg)
+                if not np.array_equal(seg_to_point(s, seg_idx, start_v), refactored_path): # Dont add line segments consisting of one point
                     possible_paths.append((s, seg_idx, (start_v, c_i_in_seg), -1)) # Vertex 2 being the first cross, 0 is first in shape order
 
                 # Has cross point after?
                 end_v = c_i_in_seg + 1 if c_i_in_seg - 1 != seg_cross_cnt else 1
-                if not np.array_equal(seg_to_point(s, seg_idx, c_i_in_seg), seg_to_point(s, seg_idx, end_v)):
+                if not np.array_equal(refactored_path, seg_to_point(s, seg_idx, end_v)):
                     possible_paths.append((s, seg_idx, (c_i_in_seg, end_v), 1)) # Vertex 2 being the first cross, 0 is first in shape order
+        
 
-        paths_to_save = set()
-        for i in range(len(possible_paths)):
-            for j in range(len(possible_paths)):
-                if j != i:
-                    s1, seg_idx1, v_idxs1, _ = possible_paths[i]
-                    s2, seg_idx2, v_idxs2, _ = possible_paths[j]
+        nbr_paths = len(possible_paths)
+        paths_to_check = set(range(nbr_paths))
+        valid_paths = set()
+        for i in range(nbr_paths):
+            for j in range(i + 1, nbr_paths):
+                s1, seg_idx1, v_idxs1, _ = possible_paths[i]
+                s2, seg_idx2, v_idxs2, _ = possible_paths[j]
+                if s1 != s2 and j in paths_to_check and i in paths_to_check:
                     path1 = shapely.LineString([seg_to_point(s1, seg_idx1, v_idxs1[0]), seg_to_point(s1, seg_idx1, v_idxs1[1])])
                     path2 = shapely.LineString([seg_to_point(s2, seg_idx2, v_idxs2[0]), seg_to_point(s2, seg_idx2, v_idxs2[1])])
                     if path1.intersection(path2).geom_type == "LineString":
-                        paths_to_save.add(possible_paths[i])
-                        paths_to_save.add(possible_paths[j])
-                        
-        possible_paths = list(filter(lambda p: is_contained_within(seg_to_middle_point(*p[0:3]), bins[(p[0] + 1) % 2], bounds[(p[0] + 1) % 2]), possible_paths))
-        paths_to_save.update(possible_paths)
-        
-        possible_paths = list(paths_to_save)
+                        valid_paths.add(possible_paths[i])
+                        valid_paths.add(possible_paths[j])
+                        paths_to_check.discard(i)
+                        paths_to_check.discard(j)
+                        break
+ 
+        possible_paths = list(filter(lambda p: is_contained_within(seg_to_middle_point(*p[0:3]), bins[(p[0] + 1) % 2], bounds[(p[0] + 1) % 2],cache=cache[(p[0] + 1) % 2]), [possible_paths[i] for i in paths_to_check]))
+        valid_paths.update(possible_paths)
+        possible_paths = list(valid_paths)
         
         # print("")
         # DEBUG_print_paths(list(paths_to_save))
