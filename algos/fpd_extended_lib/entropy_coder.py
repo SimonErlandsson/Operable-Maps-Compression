@@ -25,13 +25,19 @@ for f in glob.glob(ENTROPY_BASE_PATH + '/*'):
     
 def encode(msg, delta_len):
     if ENTROPY_METHOD == "Huffman":
-        return huffman_encode(msg, delta_len)
+        if delta_len in huffman_codecs:
+            return huffman_encode(msg, delta_len)
+        else:
+            return msg, len(msg)
     elif ENTROPY_METHOD == "Golomb":
         return golomb_encode(msg)
         
 def decode(msg, delta_len):
     if ENTROPY_METHOD == "Huffman":
-        return huffman_decode(msg, delta_len)
+        if delta_len in huffman_decodecs:
+            return huffman_decode(msg, delta_len)
+        else:
+            return msg, len(msg)
     elif ENTROPY_METHOD == "Golomb":
         return golomb_decode(msg, delta_len)            
 
