@@ -39,7 +39,7 @@ def sequence_decoder(bin, seq_list, delta_size):
 def ring_decoder(bin, polygon_list, delta_size):
     # Extract number of chunks for a ring
     chks_in_ring = bytes_to_uint(bin, RING_CHK_CNT_SIZE)
-
+    
     ring_coords = []
     # Loop through chunks in ring
     for i in range(chks_in_ring):

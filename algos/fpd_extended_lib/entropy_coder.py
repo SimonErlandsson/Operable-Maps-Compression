@@ -24,21 +24,21 @@ for f in glob.glob(ENTROPY_BASE_PATH + '/*'):
 
     
 def encode(msg, delta_len):
-    if ENTROPY_METHOD == "Huffman":
+    if cfg.ENTROPY_METHOD == EM.HUFFMAN:
         if delta_len in huffman_codecs:
             return huffman_encode(msg, delta_len)
         else:
             return msg, len(msg)
-    elif ENTROPY_METHOD == "Golomb":
+    elif cfg.ENTROPY_METHOD == EM.GOLOMB:
         return golomb_encode(msg)
         
 def decode(msg, delta_len):
-    if ENTROPY_METHOD == "Huffman":
+    if cfg.ENTROPY_METHOD == EM.HUFFMAN:
         if delta_len in huffman_decodecs:
             return huffman_decode(msg, delta_len)
         else:
-            return msg, len(msg)
-    elif ENTROPY_METHOD == "Golomb":
+            return msg[:delta_len], delta_len
+    elif cfg.ENTROPY_METHOD == EM.GOLOMB:
         return golomb_decode(msg, delta_len)            
 
 #Huffman Encoding
@@ -75,7 +75,7 @@ def golomb_encode(msg):
 def golomb_decode(msg, delta_len):
     M = math.pow(2,cfg.ENTROPY_PARAM) 
     q = 0
-    while(msg[q] == 1):
+    while msg[q] == 1:
         q += 1
     r = msg[q + 1:q + 1 + cfg.ENTROPY_PARAM]
     r = util.ba2int(r) # + 1 for the ending 0
@@ -85,27 +85,10 @@ def golomb_decode(msg, delta_len):
 def __unary_encode(value):
     return bitarray("1" * value + "0")
 
-def check_optimal_parameter(deltas):
-    max_value = math.inf
-    best_param = 0
-    for i in range(0, 25):
-        cfg.ENTROPY_PARAM = i
-        tot_sum = 0
-        for d in deltas:
-            tot_sum += len(golomb_encode(d)[0])
-        if tot_sum < max_value:
-            best_param = i
-            max_value = tot_sum
-        tot_sum = 0
-    return best_param
-
-def k_est(deltas, delta_size):
-    if cfg.GOLOMB_MIN_BRUTEFORCE:
-        return check_optimal_parameter([uint_to_ba(d, delta_size) for d in deltas])
-    else:
-        delta_mean = sum(deltas) / len(deltas)
-        golden_ratio = (math.sqrt(5) + 1) / 2
-        return max(0, 1 + math.floor(math.log2(math.log(golden_ratio - 1) / math.log(delta_mean /(delta_mean + 1)))))
+def k_est(deltas):
+    delta_mean = sum(deltas) / len(deltas)
+    golden_ratio = (math.sqrt(5) + 1) / 2
+    return max(0, 1 + math.floor(math.log2(math.log(golden_ratio - 1) / math.log(delta_mean /(delta_mean + 1)))))
 
 #Overall
 def get_entropy_metadata(deltas, delta_size):
@@ -113,50 +96,61 @@ def get_entropy_metadata(deltas, delta_size):
         Returns data appended to header and settings used for compression/decomp.
     '''
     deltas = [d for d in deltas if (d == 0 or math.log2(d) <= delta_size)]
-    if not cfg.USE_ENTROPY:
-         return ("None", False, 0)
-    if cfg.AUTO_SELECT_METHOD and cfg.USE_ENTROPY:
+    if cfg.ENTROPY_METHOD == EM.NONE:
+         return (EM.NONE, False, 0)
+    if cfg.ENTROPY_METHOD == EM.AUTO:
         return get_best_strategy(deltas, delta_size)
-    elif cfg.ENTROPY_METHOD == "Golomb":
-        return ("Golomb", True, k_est(deltas, delta_size))
-    elif cfg.ENTROPY_METHOD == "Huffman":
-        return ("Huffman", True, 255)
-    return cfg.ENTROPY_PARAM
+    if cfg.ENTROPY_METHOD == EM.GOLOMB:
+        return (EM.GOLOMB, True, k_est(deltas))
+    if cfg.ENTROPY_METHOD == EM.HUFFMAN:
+        return (EM.HUFFMAN, True, 255)
     
 def get_best_strategy(deltas, delta_size):
     '''
         Calculates the compression method which gives the lowest total size.
     '''
-    before = cfg.ENTROPY_PARAM
-    cfg.ENTROPY_PARAM = k_est(deltas, delta_size)
+    old_entropy_param = cfg.ENTROPY_PARAM
+    golomb_estimated = k_est(deltas)
+    cfg.ENTROPY_PARAM = golomb_estimated 
     golomb_tot_size, huffman_tot_size, normal_tot_size = 0, 0, 0
     
     for d in deltas:
         d_bits = uint_to_ba(d, delta_size)
         golomb_tot_size += len(golomb_encode(d_bits)[0])
         normal_tot_size += len(d_bits)
-        huffman_tot_size += len(huffman_encode(d_bits, delta_size)[0])
-    cfg.ENTROPY_PARAM = before
+        if delta_size in huffman_codecs:
+            huffman_tot_size += len(huffman_encode(d_bits, delta_size)[0])
+    cfg.ENTROPY_PARAM = old_entropy_param
+    
+    if delta_size not in huffman_codecs:
+        huffman_tot_size = 99999999999
     if golomb_tot_size < normal_tot_size and golomb_tot_size < huffman_tot_size:
-        return ("Golomb", True, k_est(deltas, delta_size))
+        return (EM.GOLOMB, True, golomb_estimated)
     elif huffman_tot_size < normal_tot_size:
-        return ("Huffman", True, 255)
+        return (EM.HUFFMAN, True, 255)
     else:
-        return ("None", False, 0)
+        return (EM.NONE, False, 0)
 
 def decode_entropy_param(value, delta_size):
     if value == 0:
         cfg.USE_ENTROPY = False
+        cfg.ENTROPY_METHOD = EM.NONE
+        cfg.ENTROPY_PARAM = 0
     elif value == 255:
         cfg.USE_ENTROPY = True
-        cfg.ENTROPY_METHOD = "Huffman"
+        cfg.ENTROPY_METHOD = EM.HUFFMAN
         cfg.ENTROPY_PARAM = delta_size
     else:
         cfg.USE_ENTROPY = True
-        cfg.ENTROPY_METHOD = "Golomb"
+        cfg.ENTROPY_METHOD = EM.GOLOMB
         cfg.ENTROPY_PARAM = value
 
 def train_arith_model(model, dataset, iter = None):
+    '''
+        NOTE: Arithmetic encoding was discountinued during development
+        due to time constraints. But may be used instead of Huffman for
+        encoding a whole chunk of deltas.
+    '''
     import bench_utils, tqdm
     from algos.fpd_extended_lib.compress import calculate_delta_size
     
@@ -183,15 +177,15 @@ def compress_chunk(bits, chk_hdr_offset, delta_bytes_size):
     coords_bits = bits[chk_dt_offset:chk_dt_offset + delta_bytes_size]
     comp_dt_bits = bitarray()
 
-    if cfg.COMPRESSION_METHOD == "zlib":
+    if cfg.CHUNK_COMP_METHOD == CM.ZLIB:
         comp_dt_bytes = zlib.compress(coords_bits.tobytes())
         comp_dt_bits.frombytes(comp_dt_bytes)
 
-    elif cfg.COMPRESSION_METHOD == "gzip":
+    elif cfg.CHUNK_COMP_METHOD == CM.GZIP:
         comp_dt_bytes = gzip.compress(coords_bits.tobytes())
         comp_dt_bits.frombytes(comp_dt_bytes)
 
-    elif cfg.COMPRESSION_METHOD == "arith":
+    elif cfg.CHUNK_COMP_METHOD == CM.ARITHMETIC:
         comp_dt_bits = bitarray()
         comp_dt_bits.extend(cfg.ARITHMETIC_ENCODER.compress([int(x) for x in [*coords_bits.to01()]]))
         
@@ -209,15 +203,15 @@ def decompress_chunk(bits, chk_dt_offset, chk_dt_bitsize):
     after_bits = bits[chk_dt_offset + chk_dt_bitsize:]
     decompressed_bits = bitarray()
 
-    if cfg.COMPRESSION_METHOD == "zlib":
+    if cfg.CHUNK_COMP_METHOD == CM.ZLIB:
         coords_bits = zlib.decompress(comp_dt_bits.tobytes())
         decompressed_bits.frombytes(coords_bits)
 
-    elif cfg.COMPRESSION_METHOD == "gzip":
+    elif cfg.CHUNK_COMP_METHOD == CM.GZIP:
         coords_bits = gzip.decompress(comp_dt_bits.tobytes())
         decompressed_bits.frombytes(coords_bits)
 
-    elif cfg.COMPRESSION_METHOD == "arith":
+    elif cfg.CHUNK_COMP_METHOD == CM.ARITHMETIC:
         indata = [int(x) for x in [*comp_dt_bits.to01()]]
         decompressed_bits.extend(cfg.ARITHMETIC_ENCODER.decompress(indata, len(indata)))
     else:

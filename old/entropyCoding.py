@@ -39,3 +39,29 @@ def __get_bit_seq_freqs(deltas):
             else:
                 freq_by_bits[delta_len][delta] = 1
     return freq_by_bits
+
+
+def check_optimal_parameter(deltas):
+    max_value = math.inf
+    best_param = 0
+    for i in range(0, 25):
+        cfg.ENTROPY_PARAM = i
+        tot_sum = 0
+        for d in deltas:
+            tot_sum += len(golomb_encode(d)[0])
+        if tot_sum < max_value:
+            best_param = i
+            max_value = tot_sum
+        tot_sum = 0
+    return best_param
+
+
+if COMPRESS_CHUNK and COMPRESSION_METHOD == "arith":
+    from arithmetic_compressor import AECompressor
+    from arithmetic_compressor.models import ContextMix_Linear
+
+# create the model
+    model = ContextMix_Linear()
+    # create an arithmetic coder
+    train_arith_model(model, DATASET_PATH, 1000)
+    cfg.ARITHMETIC_ENCODER = AECompressor(model, adapt=False)   

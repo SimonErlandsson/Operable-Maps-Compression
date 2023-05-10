@@ -7,8 +7,12 @@ import algos.fpd_extended_lib.cfg
 from algos.fpd_extended_lib.low_level import *
 from algos.fpd_extended_lib.decompress import *
 
-# Not implemented to work with COMPRESS_CHUNK==TRUE
+# Not implemented to work with COMPRESS_CHUNK==TRUE or USE_ENTROPY==True
 def add_vertex(self, args):
+    """
+    DO NOT USE ENTROPY OR CHUNK COMPRESSION WHEN CALLING METHOD.
+    """
+    assert(not(USE_ENTROPY or COMPRESS_CHUNK))
     def create_chunk(reset_point, delta_cnt=0):
         middle = bitarray(endian='big')
         middle.extend(uint_to_ba(delta_cnt, D_CNT_SIZE))

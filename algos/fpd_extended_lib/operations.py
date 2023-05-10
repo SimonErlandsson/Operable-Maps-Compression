@@ -49,8 +49,7 @@ def vertices(self, bin_in):
 
         deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
 
-        if COMPRESS_CHUNK or USE_ENTROPY:
-            # Go through chunk (inlined sequence decode)
+        if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
             delta_bytes_size = bytes_to_uint(bin, D_BITSIZE_SIZE)
 
         # Extract reset point

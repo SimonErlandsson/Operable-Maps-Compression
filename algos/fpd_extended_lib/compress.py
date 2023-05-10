@@ -37,7 +37,7 @@ def point_count(geometry):
     return ring_count
 
 def append_header(bits, geometry, d_size, deltas):
-    (cfg.ENTROPY_METHOD, cfg.USE_ENTROPY,cfg.ENTROPY_PARAM) = get_entropy_metadata(deltas, d_size)
+    (cfg.ENTROPY_METHOD, cfg.USE_ENTROPY, cfg.ENTROPY_PARAM) = get_entropy_metadata(deltas, d_size)
     # Meta data
     bits.frombytes(uchar_to_bytes(d_size))
     bits.frombytes(uchar_to_bytes(int(shapely.get_type_id(geometry))))  # 1 byte is enough for storing type
@@ -62,11 +62,11 @@ def append_delta_pair(bits, d_x_zig, d_y_zig, d_size):
         return (d_size, d_size) if not cfg.USE_ENTROPY else (len_x, len_y)
 
 def fp_delta_encoding(geometry, d_size, deltas):
-    STORE_DT_BITSIZE = cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY
     # List of resulting bytes.
     bits = bitarray(endian='big')
     # Init with 'd_size', 'geom_type'
     append_header(bits, geometry, d_size, deltas)
+    STORE_DT_BITSIZE = cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY
 
     # Type specific variables
     geo_type = shapely.get_type_id(geometry)
@@ -154,7 +154,6 @@ def fp_delta_encoding(geometry, d_size, deltas):
         rem_points_ring -= 1
 
     # All points processed. Update size of final chunk
-    ## TODO: MOVE DOWN
     if cfg.COMPRESS_CHUNK:
         bits, chk_dt_bitsize = compress_chunk(bits, chk_hdr_offset, chk_dt_bitsize)
 

@@ -10,9 +10,12 @@ from algos.fpd_extended_lib.decompress import *
 
 def get_chunks(bin_in, include_ring_start=True):
     """
+    # DEBUG ONLY!
     Only used for non-timed operations, i.e. debugging/testing implementations
     # NOTE: Can also return the first ring coordinate when reaching end of ring!
+    # DO NOT USE ENTROPY OR CHUNK COMPRESSION WHEN CALLING METHOD.
     """
+    assert(not(cfg.USE_ENTROPY or cfg.COMPRESS_CHUNK))
     chunks = []
     cfg.offset = 0
     bin = bitarray(endian='big')
@@ -36,10 +39,8 @@ def get_chunks(bin_in, include_ring_start=True):
             chunks_in_ring_left = bytes_to_uint(bin, RING_CHK_CNT_SIZE)
             chunks_in_ring = chunks_in_ring_left
 
-        # Go through chunk (inlined sequence decode)
-        if cfg.COMPRESS_CHUNK:
-            deltas_bytes_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
         deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
+
         # Extract reset point
         x = bytes_to_double(bin)
         y = bytes_to_double(bin)
@@ -50,6 +51,7 @@ def get_chunks(bin_in, include_ring_start=True):
         # Loop through deltas in chunk
         for _ in range(deltas_in_chunk):
             x = bytes_to_decoded_coord(bin, x, delta_size)
+            print(x)
             y = bytes_to_decoded_coord(bin, y, delta_size)
             chunk.append([x, y])
         chunks.append(chunk)
@@ -98,8 +100,12 @@ def random_access(bin_in, idx, cache, get_chunk=False):
             chunks_in_ring_left = bytes_to_uint(bin, RING_CHK_CNT_SIZE)
             ring_start_offset = cfg.offset
         deltas_in_chunk_offset = cfg.offset
-        deltas_bytes_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
         deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
+
+        if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
+            delta_bytes_size = bytes_to_uint(bin, D_BITSIZE_SIZE)
+        else:
+            delta_bytes_size = deltas_in_chunk * delta_size * 2
 
         if get_chunk and cur_idx == idx:
             # Looking for whole chunk, found it
@@ -112,7 +118,7 @@ def random_access(bin_in, idx, cache, get_chunk=False):
                     next_chk_offset = ring_start_offset
                 else:
                     # Append next chunk start
-                    next_chk_offset = cfg.offset + FLOAT_SIZE * 2 + delta_size * 2 * deltas_in_chunk
+                    next_chk_offset = cfg.offset + FLOAT_SIZE * 2 + delta_bytes_size
                 next_vert, cache = access_vertex_chk(bin, next_chk_offset, delta_size, 0, cache)
                 chk.append(next_vert)
             cfg.offset = old_offset
@@ -125,25 +131,27 @@ def random_access(bin_in, idx, cache, get_chunk=False):
 
         # Jump to next chunk
         cur_idx += 1 + (deltas_in_chunk if not get_chunk else 0)
-        cfg.offset += FLOAT_SIZE * 2 + deltas_bytes_in_chunk
+        cfg.offset += FLOAT_SIZE * 2 + delta_bytes_size
         chunks_in_ring_left -= 1
         if (chunks_in_ring_left == 0):
             rings_left -= 1
     raise Exception("Out of bounds!")
 
 
-def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_vertices=False, get_delta_offsets=False):
+def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_vertices=False):
     """
     Can be used if the chunk location in bin is already known, and a vertex within the chunk is needed.
     Supply the offset to D_CNT, and idx is the index within the chunk
     List_Vertices can be used to toggle between only returning the vertex at idx, or a list of all vertices
     within the chunk, up until and including idx.
+    DO NOT USE ENTROPY OR CHUNK COMPRESSION WHEN CALLING METHOD.
     """
     old_offset = cfg.offset
     cfg.offset = chk_offset
-    if cfg.COMPRESS_CHUNK:
-        cfg.offset += D_CNT_SIZE #skips delta bytes
     deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
+    if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
+        delta_bytes_size = bytes_to_uint(bin, D_BITSIZE_SIZE)
+    
     if idx == None:
         idx = deltas_in_chunk
 
@@ -151,18 +159,16 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
     x, y = (bytes_to_double(bin), bytes_to_double(bin))
     if list_vertices:
         vertices = [(x, y)]
-    delta_offsets = []
+
+    if cfg.COMPRESS_CHUNK:
+        bin, _ = decompress_chunk(bin, cfg.offset, delta_bytes_size) 
+
     # Loop through deltas in chunk
     for idx in range(idx):
-        delta_offsets.append(cfg.offset)
         x = bytes_to_decoded_coord(bin, x, delta_size)
         y = bytes_to_decoded_coord(bin, y, delta_size)
         if list_vertices:
             vertices.append((x, y))
-    delta_offsets.append(cfg.offset)
 
     cfg.offset = old_offset
-    if get_delta_offsets:
-        return ((x, y) if not list_vertices else vertices), cache, delta_offsets
-    
     return ((x, y) if not list_vertices else vertices), cache
