@@ -135,22 +135,15 @@ def is_contained_within(containee, container, container_bounds, debug_correct_an
     ray_bound = ray.bounds
 
     #Uses caching to not call get_chunk multiple times
-    if OPTIMIZED:
-        chks = [idx for idx, bound in container_bounds.items() if is_bboxs_intersecting(ray_bound, bound)]
-        if cache != None:
-            segments = []
-            for c in chks:
-                if c not in cache:
-                    chunk_shape = chunk_to_shape(get_chunk(container, c))
-                    cache[c] = chunk_shape
-                    segments.append(chunk_shape)
-                else:
-                    segments.append(cache[c])
+    chks = [idx for idx, bound in container_bounds.items() if is_bboxs_intersecting(ray_bound, bound)]
+    segments = []
+    for c in chks:
+        if c not in cache:
+            chunk_shape = chunk_to_shape(get_chunk(container, c))
+            cache[c] = chunk_shape
+            segments.append(chunk_shape)
         else:
-            segments = [chunk_to_shape(get_chunk(container, c)) if c not in cache else cache[c] for c in chks]
-    else:
-        chks = get_chunks_idxs_within_bounds(container, ray_bound)
-        segments = [chunk_to_shape(get_chunk(container, c)) for c in chks]
+            segments.append(cache[c])
 
     #Count how many times the ray intersects container boundries
     intersecting_points = []
@@ -176,28 +169,23 @@ def is_contained_within(containee, container, container_bounds, debug_correct_an
 #@profile
 def is_point_on_segment(seg, pt):
     """Checks if a point is on a segment"""
-    if  OPTIMIZED:
-        x, y = pt
-        x1, y1 = seg[0]
-        x2, y2 = seg[1]
-        
-        cross = (y - y1) * (x2 - x1) - (x - x1) * (y2 - y1)
-
-        # Check if the point is collinear with the segment
-        if abs(cross) > POINT_ERR_TOL:
-            return False
-
-        dot = (x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)
-        seg_length = (x2 - x1) ** 2 + (y2 - y1) ** 2
+    x, y = pt
+    x1, y1 = seg[0]
+    x2, y2 = seg[1]
     
-        #POINT_ERR_TOL for robustness in internal approximation errors
-        if dot < -POINT_ERR_TOL or dot > seg_length + POINT_ERR_TOL: 
-            return False
-        return True
-    else:
-        #Non optimal version (Tends to be more robust though)
-        seg_pt_1, seg_pt_2, pt = (np.array(seg[0]), np.array(seg[1]), np.array(pt))
-        return abs(np.linalg.norm(seg_pt_1 - pt) + np.linalg.norm(seg_pt_2 - pt) - np.linalg.norm(seg_pt_1 - seg_pt_2)) < 1e-15
+    cross = (y - y1) * (x2 - x1) - (x - x1) * (y2 - y1)
+
+    # Check if the point is collinear with the segment
+    if abs(cross) > POINT_ERR_TOL:
+        return False
+
+    dot = (x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)
+    seg_length = (x2 - x1) ** 2 + (y2 - y1) ** 2
+
+    #POINT_ERR_TOL for robustness in internal approximation errors
+    if dot < -POINT_ERR_TOL or dot > seg_length + POINT_ERR_TOL: 
+        return False
+    return True
 
    
 
@@ -231,9 +219,8 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
         chk_coords[i] = {c_i: get_chunk(bins[i], c_i) for c_i in chk_idxs[i]} # Get chunk -> coordinates for those inside common boudning box
         
         chk_polylines[i] = {c_i: chunk_to_shape(coords) for c_i, coords in chk_coords[i].items()} #Chunk -> polylines used in isintersection checks
-        if OPTIMIZED:
-            for c_i, shape in chk_polylines[i].items():
-                cache[i][c_i] = shape
+        for c_i, shape in chk_polylines[i].items():
+            cache[i][c_i] = shape
 
         chks[i] = list(chk_coords[i].values()) # Get chunk coords
         polylines[i] = list(chk_polylines[i].values()) # Transform each chunk to polyline
@@ -245,97 +232,57 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
             seg_idxs[i] = {segments[i][idx]: idx for idx in range(len(segments[i]))} # Get chunk -> segments data
 
     #Optimized version making fewer is_point_on_segment calls
-    if OPTIMIZED:
-        intersecting_points_idxs = dict() #To not have duplicates
+    intersecting_points_idxs = dict() #To not have duplicates
 
-        #Variables to save segment -> crossings and crossings -> segments
-        seg_to_cross = [defaultdict(list), defaultdict(list)]
-        cross_to_seg = []
-        current_p_idx = 0
-        #Loops through both geometrie's chunks, checks if polylines for those chunks intersect and if, save segment <-> crossings
-        for chk_idx1, polylines1 in chk_polylines[0].items():
-            for chk_idx2, polylines2 in chk_polylines[1].items():
-                if polylines1.intersects(polylines2):
-                    
-                    if res_list == None: # If doing predicate, return here. Else save point
-                        return True, bounds
-                    
-                    curr_intersect_pnts = set((*coord,) for coord in list(shapely.get_coordinates(polylines1.intersection(polylines2)))) # Get all intersection points
-                    # If intersection, save crossing <-> segment_idx
-                    for p in curr_intersect_pnts: #For each intersection point found
-                        #If point has not been extracted before get its index
-                        if p not in intersecting_points_idxs:
-                            cross_to_seg.append(([], []))
-                            p_idx = current_p_idx
-                            current_p_idx += 1
-                            intersecting_points.append(p) #Point have not been discovered before so add to intersection points list (No duplicates allowed)
-                            intersecting_points_idxs[p] = p_idx
-                        else:
-                            p_idx = intersecting_points_idxs[p]
-                        for s, chk_idx in [(0,chk_idx1), (1, chk_idx2)]: #Go through both chunks for both geometries
-                            crossed_segs_cnt = 0 #Each cross point can only have 2 segments from one geometry (non self intersecting)
-                            chk_segs = chk_segments[s][chk_idx] #Extract the relevant segment
-                            for seg in chk_segs: #Go through each of those segments   
-                                seg_idx = seg_idxs[s][seg] #Get the correct segment index !O(n)!
-                                if not seg_idx in cross_to_seg[p_idx][s]:
-                                    if is_point_on_segment(seg, p): #Wierdest
-                                    #Checking if a segment intersect with intersection point or line
-                                        seg_to_cross[s][seg_idx].append(p_idx)
-                                        cross_to_seg[p_idx][s].append(seg_idx)
-                                        crossed_segs_cnt += 1
-                                        if crossed_segs_cnt == 2:
-                                            break
-                                    
+    #Variables to save segment -> crossings and crossings -> segments
+    seg_to_cross = [defaultdict(list), defaultdict(list)]
+    cross_to_seg = []
+    current_p_idx = 0
+    #Loops through both geometrie's chunks, checks if polylines for those chunks intersect and if, save segment <-> crossings
+    for chk_idx1, polylines1 in chk_polylines[0].items():
+        for chk_idx2, polylines2 in chk_polylines[1].items():
+            if polylines1.intersects(polylines2):
+                
+                if res_list == None: # If doing predicate, return here. Else save point
+                    return True, bounds
+                
+                curr_intersect_pnts = set((*coord,) for coord in list(shapely.get_coordinates(polylines1.intersection(polylines2)))) # Get all intersection points
+                # If intersection, save crossing <-> segment_idx
+                for p in curr_intersect_pnts: #For each intersection point found
+                    #If point has not been extracted before get its index
+                    if p not in intersecting_points_idxs:
+                        cross_to_seg.append(([], []))
+                        p_idx = current_p_idx
+                        current_p_idx += 1
+                        intersecting_points.append(p) #Point have not been discovered before so add to intersection points list (No duplicates allowed)
+                        intersecting_points_idxs[p] = p_idx
+                    else:
+                        p_idx = intersecting_points_idxs[p]
+                    for s, chk_idx in [(0,chk_idx1), (1, chk_idx2)]: #Go through both chunks for both geometries
+                        crossed_segs_cnt = 0 #Each cross point can only have 2 segments from one geometry (non self intersecting)
+                        chk_segs = chk_segments[s][chk_idx] #Extract the relevant segment
+                        for seg in chk_segs: #Go through each of those segments   
+                            seg_idx = seg_idxs[s][seg] #Get the correct segment index !O(n)!
+                            if not seg_idx in cross_to_seg[p_idx][s]:
+                                if is_point_on_segment(seg, p): #Wierdest
+                                #Checking if a segment intersect with intersection point or line
+                                    seg_to_cross[s][seg_idx].append(p_idx)
+                                    cross_to_seg[p_idx][s].append(seg_idx)
+                                    crossed_segs_cnt += 1
+                                    if crossed_segs_cnt == 2:
+                                        break
+                                
 
-            #Avoid sorting if predicate intersection
-            if res_list != None:
-                for s in range(2):
-                    for seg_idx in range(len(seg_to_cross[s])):    
-                        seg_to_cross[s][seg_idx].sort(key=lambda x: math.dist(segments[s][seg_idx][0],intersecting_points[x])) # Sort ordered by distance from p[0]
-        
-        if len(intersecting_points) == 0:
-            return False, bounds 
+        #Avoid sorting if predicate intersection
+        if res_list != None:
+            for s in range(2):
+                for seg_idx in range(len(seg_to_cross[s])):    
+                    seg_to_cross[s][seg_idx].sort(key=lambda x: math.dist(segments[s][seg_idx][0],intersecting_points[x])) # Sort ordered by distance from p[0]
     
-    #Unoptimized version
-    else:
-        intersecting_points_set = set() #To not have duplicates
-        for i in polylines[0]:
-            for j in polylines[1]:
-                if i.intersects(j):
-                    # DEBUG ------------------
-                    # if plot_all or debug_correct_ans != None and debug_correct_ans != True:
-                    #     for cs in polylines[0] + polylines[1]:
-                    #         plot_geometry(cs)
-                    #     plot_intersecting_points(list(shapely.get_coordinates(i.intersection(j))))
-                    #     plot_chunks_bounds(bins[0], include_next_chunk_start=True, avoid_show=True, idxs=chk_idxs[0])
-                    #     plot_chunks_bounds(bins[1], include_next_chunk_start=True, avoid_create_frame=True, idxs=chk_idxs[1], txt=f" : was True expected {debug_correct_ans}")
-                    # END ----------------------
-                    if res_list == None: # If doing predicate, return here. Else save point
-                        return True, bounds
-                    intersect_points = list(shapely.get_coordinates(i.intersection(j)))
-                    for point in intersect_points: 
-                        if str(point) not in intersecting_points_set:
-                            intersecting_points.append(point)
-                            intersecting_points_set.add(str(point))
-            
-        if len(intersecting_points) == 0:
-            return False, bounds
-        ## Append to res_list
-        seg_to_cross = [defaultdict(list), defaultdict(list)]
-        cross_to_seg = [[[], []] for _ in range(len(intersecting_points))]
-        for s in range(2):
-            # Find which segments contain intersecting points
-            for seg_idx, seg in enumerate(segments[s]):
-                for p_idx, p in enumerate(intersecting_points):
-                    #plot_intersecting_points([p])
-                    if is_point_on_segment(seg, p):
-                        #plot_geometry(shapely.LineString(seg))
-                        seg_to_cross[s][seg_idx].append(p_idx)
-                        cross_to_seg[p_idx][s].append(seg_idx)
-                    # else:
-                    #     plot_geometry(shapely.LineString(seg), solid=False)
-                seg_to_cross[s][seg_idx].sort(key=lambda x: np.linalg.norm(segments[s][seg_idx][0] - intersecting_points[x])) # Sort ordered by distance from p[0]
+    if len(intersecting_points) == 0:
+        return False, bounds 
     
+
     #Update results list (return value)
     res_list.append(intersecting_points)
     res_list.append(segments)
@@ -384,12 +331,12 @@ def possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to
             start_v = c_i_in_seg - 1 if c_i_in_seg != 2 else 0 # V:0 left of segment, V:1 right in segment, V:2+ intersection points
             
             refactored_path = seg_to_point(s, seg_idx, c_i_in_seg)
-            if not np.array_equal(seg_to_point(s, seg_idx, start_v), refactored_path): # Dont add line segments consisting of one point
+            if not seg_to_point(s, seg_idx, start_v) == refactored_path: # Dont add line segments consisting of one point
                 possible_paths.append((s, seg_idx, (start_v, c_i_in_seg), -1)) # Vertex 2 being the first cross, 0 is first in shape order
 
             # Has cross point after?
             end_v = c_i_in_seg + 1 if c_i_in_seg - 1 != seg_cross_cnt else 1
-            if not np.array_equal(refactored_path, seg_to_point(s, seg_idx, end_v)):
+            if not refactored_path == seg_to_point(s, seg_idx, end_v):
                 possible_paths.append((s, seg_idx, (c_i_in_seg, end_v), 1)) # Vertex 2 being the first cross, 0 is first in shape order
     
 
@@ -504,15 +451,10 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
                 v1, v2 = seg_to_point(s, seg_idx, v_idxs[start_idx]), seg_to_point(s, seg_idx, v_idxs[end_idx])
                 
                 #Add front and back edges to visited edges set
-                if OPTIMIZED and (v1, v2) not in visited_edges and (v2, v1) not in visited_edges:
+                if (v1, v2) not in visited_edges and (v2, v1) not in visited_edges:
                     path_append([v1, v2]) # Add segment to resulting shape a
                     visited_edges.add((v1, v2))
                     visited_edges.add((v2, v1))
-
-                elif not OPTIMIZED and str([v1, v2]) not in visited_edges and str([v2, v1]) not in visited_edges:
-                    path_append([seg_to_point(s, seg_idx, v_idxs[0]), seg_to_point(s, seg_idx, v_idxs[1])]) # Add segment to resulting shape
-                    visited_edges.add(str([v1, v2]))
-                    visited_edges.add(str([v2, v1]))
 
                 e_v = v_idxs[end_idx] # Find index of actual end vertex (i.e. flip segment based on direction)
 
@@ -521,7 +463,7 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
                     encountered_c_idx = seg_to_cross[s][seg_idx][e_v - 2] # Find cross_idx of collided cross-point
                     processed_ways[encountered_c_idx][s].add(seg_idx) # Add to shape's list for the cross-point
                     break
-                elif next_seg_idx == -1 or next_seg_idx == len(segments[s]) or not np.array_equal(seg_to_point(s, seg_idx, e_v), seg_to_point(s, next_seg_idx, start_idx)): #<- HERE ERROR
+                elif next_seg_idx == -1 or next_seg_idx == len(segments[s]) or not seg_to_point(s, seg_idx, e_v) == seg_to_point(s, next_seg_idx, start_idx): #<- HERE ERROR
                     break # Break if no more segments, or if path formed by segments is not continuous
                 else:
                     seg_idx = next_seg_idx # Next segment
