@@ -11,8 +11,36 @@ import itertools
 import bisect 
 
 
+def is_segment_on_top(segment1, segment2):
+    x1, y1 = segment1[0]
+    x2, y2 = segment1[1]
+    x3, y3 = segment2[0]
+    x4, y4 = segment2[1]
+
+    # Check if the segments have the same slope
+    slope_segment1 = (y2 - y1) / (x2 - x1) if (x2 - x1) != 0 else float('inf')
+    slope_segment2 = (y4 - y3) / (x4 - x3) if (x4 - x3) != 0 else float('inf')
+
+    if slope_segment1 != slope_segment2:
+        return False
+
+    # Check if segment1 is on top of segment2
+    if y1 > y3 and y2 > y4:
+        return True
+
+    return False
 
 fpd = FpdExtended()
+
+
+def are_lines_parallel(seg1, seg2):
+        x1, y1 = seg1[0]
+        x2, y2 = seg1[1]
+        x3, y3 = seg2[0]
+        x4, y4 = seg2[1]
+
+        return ((y2 - y1) / (x2 - x1) if (x2 - x1) != 0 else float('inf')) == ((y4 - y3) / (x4 - x3) if (x4 - x3) != 0 else float('inf'))
+     
 
 #@profile
 def is_bboxs_intersecting(bbox_1, bbox_2):
@@ -245,13 +273,20 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
                         else:
                             p_idx = intersecting_points_idxs[p]
                         for s, chk_idx in [(0,chk_idx1), (1, chk_idx2)]: #Go through both chunks for both geometries
+                            crossed_segs_cnt = 0 #Each cross point can only have 2 segments from one geometry (non self intersecting)
                             chk_segs = chk_segments[s][chk_idx] #Extract the relevant segment
-                            for seg in chk_segs: #Go through each of those segments
+                            for seg in chk_segs: #Go through each of those segments   
                                 seg_idx = seg_idxs[s][seg] #Get the correct segment index !O(n)!
-                                if not seg_idx in cross_to_seg[p_idx][s] and is_point_on_segment(seg, p):
-                                #Checking if a segment intersect with intersection point or line
-                                    seg_to_cross[s][seg_idx].append(p_idx)
-                                    cross_to_seg[p_idx][s].append(seg_idx)
+                                if not seg_idx in cross_to_seg[p_idx][s]:
+                                    if is_point_on_segment(seg, p): #Wierdest
+                                    #Checking if a segment intersect with intersection point or line
+                                        seg_to_cross[s][seg_idx].append(p_idx)
+                                        cross_to_seg[p_idx][s].append(seg_idx)
+                                        crossed_segs_cnt += 1
+                                        if crossed_segs_cnt == 2:
+                                            break
+                                    
+
             #Avoid sorting if predicate intersection
             if res_list != None:
                 for s in range(2):
@@ -333,6 +368,57 @@ def is_intersecting(bins, debug_correct_ans=None, plot_all=False):
         return is_contained_within(bins[1], bins[0], bounds[0], debug_correct_ans=debug_correct_ans, plot_all=plot_all, cache=cache[0])
     return False
 
+# Returns the possible paths (directed segment) from an intersection point. Also checks that it is within both shapes.
+#@profile
+def possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to_middle_point, bins, cache):
+    possible_paths = []
+    seg_idxs = cross_to_seg[c_i]
+    for s in range(2): # Both shapes
+        for seg_idx in seg_idxs[s]: # Enumerate the segments containing crosspoint with id c_i
+            seg_cross_cnt = len(seg_to_cross[s][seg_idx])
+            # Get possible successor points
+            # Where is the current cross?
+            c_i_in_seg = seg_to_cross[s][seg_idx].index(c_i) + 2 # Index of vertex within segment
+
+            # Get previous cross point if exists
+            start_v = c_i_in_seg - 1 if c_i_in_seg != 2 else 0 # V:0 left of segment, V:1 right in segment, V:2+ intersection points
+            
+            refactored_path = seg_to_point(s, seg_idx, c_i_in_seg)
+            if not np.array_equal(seg_to_point(s, seg_idx, start_v), refactored_path): # Dont add line segments consisting of one point
+                possible_paths.append((s, seg_idx, (start_v, c_i_in_seg), -1)) # Vertex 2 being the first cross, 0 is first in shape order
+
+            # Has cross point after?
+            end_v = c_i_in_seg + 1 if c_i_in_seg - 1 != seg_cross_cnt else 1
+            if not np.array_equal(refactored_path, seg_to_point(s, seg_idx, end_v)):
+                possible_paths.append((s, seg_idx, (c_i_in_seg, end_v), 1)) # Vertex 2 being the first cross, 0 is first in shape order
+    
+
+    nbr_paths = len(possible_paths)
+    paths_to_check = set(range(nbr_paths))
+    valid_paths = set()
+    for i in range(nbr_paths):
+        for j in range(i + 1, nbr_paths):
+            s1, seg_idx1, v_idxs1, _ = possible_paths[i]
+            s2, seg_idx2, v_idxs2, _ = possible_paths[j]
+            if s1 != s2 and j in paths_to_check and i in paths_to_check:
+                if are_lines_parallel([seg_to_point(s1, seg_idx1, v_idxs1[0]), seg_to_point(s1, seg_idx1, v_idxs1[1])], [seg_to_point(s2, seg_idx2, v_idxs2[0]), seg_to_point(s2, seg_idx2, v_idxs2[1])]):
+                    valid_paths.add(possible_paths[i])
+                    valid_paths.add(possible_paths[j])
+                    paths_to_check.discard(i)
+                    paths_to_check.discard(j)
+                    break
+
+    possible_paths = list(filter(lambda p: is_contained_within(seg_to_middle_point(*p[0:3]), bins[(p[0] + 1) % 2], bounds[(p[0] + 1) % 2],cache=cache[(p[0] + 1) % 2]), [possible_paths[i] for i in paths_to_check]))
+    valid_paths.update(possible_paths)
+    possible_paths = list(valid_paths)
+    
+    # print("")
+    # DEBUG_print_paths(list(paths_to_save))
+    # DEBUG_print_paths(possible_paths, c_i)
+    # #Make sure points are within both shapes
+    # print("")
+    # DEBUG_print_paths(possible_paths)
+    return possible_paths
 #@profile
 def intersection(bins, debug_correct_ans=None, plot_all=False):
     cache = [{},{}]
@@ -388,60 +474,6 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
         print(str)
 
 
-    # Returns the possible paths (directed segment) from an intersection point. Also checks that it is within both shapes.
-    
-    def possible_paths(c_i, bounds):
-        possible_paths = []
-        seg_idxs = cross_to_seg[c_i]
-        for s in range(2): # Both shapes
-            for seg_idx in seg_idxs[s]: # Enumerate the segments containing crosspoint with id c_i
-                seg_cross_cnt = len(seg_to_cross[s][seg_idx])
-                # Get possible successor points
-                # Where is the current cross?
-                c_i_in_seg = seg_to_cross[s][seg_idx].index(c_i) + 2 # Index of vertex within segment
-
-                # Get previous cross point if exists
-                start_v = c_i_in_seg - 1 if c_i_in_seg != 2 else 0 # V:0 left of segment, V:1 right in segment, V:2+ intersection points
-                
-                refactored_path = seg_to_point(s, seg_idx, c_i_in_seg)
-                if not np.array_equal(seg_to_point(s, seg_idx, start_v), refactored_path): # Dont add line segments consisting of one point
-                    possible_paths.append((s, seg_idx, (start_v, c_i_in_seg), -1)) # Vertex 2 being the first cross, 0 is first in shape order
-
-                # Has cross point after?
-                end_v = c_i_in_seg + 1 if c_i_in_seg - 1 != seg_cross_cnt else 1
-                if not np.array_equal(refactored_path, seg_to_point(s, seg_idx, end_v)):
-                    possible_paths.append((s, seg_idx, (c_i_in_seg, end_v), 1)) # Vertex 2 being the first cross, 0 is first in shape order
-        
-
-        nbr_paths = len(possible_paths)
-        paths_to_check = set(range(nbr_paths))
-        valid_paths = set()
-        for i in range(nbr_paths):
-            for j in range(i + 1, nbr_paths):
-                s1, seg_idx1, v_idxs1, _ = possible_paths[i]
-                s2, seg_idx2, v_idxs2, _ = possible_paths[j]
-                if s1 != s2 and j in paths_to_check and i in paths_to_check:
-                    path1 = shapely.LineString([seg_to_point(s1, seg_idx1, v_idxs1[0]), seg_to_point(s1, seg_idx1, v_idxs1[1])])
-                    path2 = shapely.LineString([seg_to_point(s2, seg_idx2, v_idxs2[0]), seg_to_point(s2, seg_idx2, v_idxs2[1])])
-                    if path1.intersection(path2).geom_type == "LineString":
-                        valid_paths.add(possible_paths[i])
-                        valid_paths.add(possible_paths[j])
-                        paths_to_check.discard(i)
-                        paths_to_check.discard(j)
-                        break
- 
-        possible_paths = list(filter(lambda p: is_contained_within(seg_to_middle_point(*p[0:3]), bins[(p[0] + 1) % 2], bounds[(p[0] + 1) % 2],cache=cache[(p[0] + 1) % 2]), [possible_paths[i] for i in paths_to_check]))
-        valid_paths.update(possible_paths)
-        possible_paths = list(valid_paths)
-        
-        # print("")
-        # DEBUG_print_paths(list(paths_to_save))
-        # DEBUG_print_paths(possible_paths, c_i)
-        # #Make sure points are within both shapes
-        # print("")
-        # DEBUG_print_paths(possible_paths)
-        return possible_paths
-
 
     intersecting_points, segments, seg_to_cross, cross_to_seg, bounds = line_data
     #print("Intersecting Points:", intersecting_points)
@@ -452,7 +484,7 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
     visited_edges = set()
     while len(cross_left) > 0:
         c_i = cross_left.pop() # Take one cross-point
-        paths = possible_paths(c_i, bounds) # Find possible paths from the cross-point
+        paths = possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to_middle_point, bins, cache)
         if len(paths) == 0:
             res_points.append(intersecting_points[c_i])
         while len(paths) > 0:
