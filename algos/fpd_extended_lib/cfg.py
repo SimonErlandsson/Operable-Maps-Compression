@@ -24,7 +24,9 @@ COMPRESSION_METHOD = "arith" #"zlib" or "gzip"
 CONTEXT_SIZE = 4
 ARITHMETIC_ENCODER = None
 
-OPTIMIZED_INTERSECTION = True
+
+OPTIMIZED = True
 POINT_ERR_TOL = 1e-12 if USE_DEFAULT_DOUBLE else 1e-10
+
 binary_length = 0 # Used when parsing
 offset = 0  # Used when parsing
