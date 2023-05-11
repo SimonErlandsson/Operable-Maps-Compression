@@ -14,13 +14,14 @@ import bisect
 
 fpd = FpdExtended()
 
+#@profile
 def is_bboxs_intersecting(bbox_1, bbox_2):
     """Calculates if two given bounding boxes overlap"""
 
     #Calculates if two given bounding boxes overlap
     return min(bbox_1[2], bbox_2[2]) >= max(bbox_1[0], bbox_2[0]) and min(bbox_1[3], bbox_2[3]) >= max(bbox_1[1], bbox_2[1])
 
-
+#@profile
 def common_bbox(bins):  
     """Calculate the common bounding box from two FPDE compressed binaries"""
 
@@ -59,7 +60,7 @@ def common_bbox(bins):
 #chunks_bounds, _ = calculate_chunks_bounds(bin)
 # --------- /END/ METHODS REQUIRING IMPLEMENTATIONS IN FPDE ---------------
 
-
+#@profile
 def get_chunks_idxs_within_bounds(bin, bbox, get_geom_bounds=False):
     """Get chunk indexes in FPDE binary containing a segment connected to the given bounding box.
     Also return the bounds of the geometry if get_geom_bounds=True"""
@@ -70,9 +71,11 @@ def get_chunks_idxs_within_bounds(bin, bbox, get_geom_bounds=False):
 
 
 get_chunk = lambda bin, idx: fpd.get_chunk(bin, idx)[0] # Can also use slow above for debugging
+
+#@profile
 def chunk_to_shape(chk): return shapely.LineString(chk) if len(chk) != 1 else  shapely.Point(chk[0]) #Convert chunk segments to shapely object
 
-
+#@profile
 def is_contained_within(containee, container, container_bounds, debug_correct_ans=None, plot_all=False, cache=None):
     '''
     Containee is either FPDE binary object or a tuple of coordinates. Uses Ray Casting algorithm to
@@ -142,7 +145,7 @@ def is_contained_within(containee, container, container_bounds, debug_correct_an
 
     return len(intersecting_points) % 2 == 1
 
-
+#@profile
 def is_point_on_segment(seg, pt):
     """Checks if a point is on a segment"""
     if  OPTIMIZED:
@@ -172,7 +175,8 @@ def is_point_on_segment(seg, pt):
 
 # Based on the common bbox, extracts the chunks for both geometries within the bbox,
 # and performs intersection testing between the line segments.
-def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=False):
+#@profile
+def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=False, cache=None):
     """Based on the common bbox, extracts the chunks for both geometries within the bbox,
     and performs intersection testing between the line segments."""
 
@@ -186,7 +190,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
 
     #For not needing to recalculate boudning boxes and polylines in common bb
     chk_coords =    [[], []]
-    chk_polylines = [[], []]
+    chk_polylines = [{}, {}]
     chk_segments =  [[], []]
 
     #Variable for intersection
@@ -195,9 +199,14 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
 
     for i in range(2):
         chk_idxs[i], bounds[i] = get_chunks_idxs_within_bounds(bins[i], bbox, get_geom_bounds=True) #Get all bounds for a geometry as well as idxes which overlap in common bounding box
+       
         chk_coords[i] = {c_i: get_chunk(bins[i], c_i) for c_i in chk_idxs[i]} # Get chunk -> coordinates for those inside common boudning box
-        chk_polylines[i] = {c_i: chunk_to_shape(coords) for c_i, coords in chk_coords[i].items()} #Chunk -> polylines used in isintersection checks
         
+        chk_polylines[i] = {c_i: chunk_to_shape(coords) for c_i, coords in chk_coords[i].items()} #Chunk -> polylines used in isintersection checks
+        if OPTIMIZED:
+            for c_i, shape in chk_polylines[i].items():
+                cache[i][c_i] = shape
+
         chks[i] = list(chk_coords[i].values()) # Get chunk coords
         polylines[i] = list(chk_polylines[i].values()) # Transform each chunk to polyline
         
@@ -310,7 +319,7 @@ def is_intersecting(bins, debug_correct_ans=None, plot_all=False):
     # Bounding boxes intersect. Assume no intersection, ensure that no intersection is in fact occuring:
     # 1. Find all chunks which are inside the common bounding box
     #    Construct LineStrings and check for intersections
-    intersects, bounds = line_intersection(bins, bbox, debug_correct_ans, plot_all=plot_all)
+    intersects, bounds = line_intersection(bins, bbox, debug_correct_ans, plot_all=plot_all, cache=cache)
     if intersects:
         return True
 
@@ -324,7 +333,7 @@ def is_intersecting(bins, debug_correct_ans=None, plot_all=False):
         return is_contained_within(bins[1], bins[0], bounds[0], debug_correct_ans=debug_correct_ans, plot_all=plot_all, cache=cache[0])
     return False
 
-
+#@profile
 def intersection(bins, debug_correct_ans=None, plot_all=False):
     cache = [{},{}]
     bbox, overlap_type = common_bbox(bins)
@@ -335,7 +344,7 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
     # 1. Find all chunks which are inside the common bounding box
     #    Construct LineStrings and check for intersections
     line_data = []
-    result = line_intersection(bins, bbox, debug_correct_ans, line_data, plot_all)
+    result = line_intersection(bins, bbox, debug_correct_ans, line_data, plot_all, cache=cache)
 
     # 2. Ensure that the polygon is not fully contained
     #    Send ray and verify that it hits other polygon zero or even amount of times
@@ -380,6 +389,7 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
 
 
     # Returns the possible paths (directed segment) from an intersection point. Also checks that it is within both shapes.
+    
     def possible_paths(c_i, bounds):
         possible_paths = []
         seg_idxs = cross_to_seg[c_i]
