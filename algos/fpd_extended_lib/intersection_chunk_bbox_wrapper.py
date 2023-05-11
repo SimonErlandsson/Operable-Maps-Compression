@@ -16,6 +16,9 @@ chunk_bounds_offset = -1
 
 INTERSECTION_CHK_CNT_SIZE = 32
 
+def get_chunk_bboxes_len():
+    return len(chunk_bboxes)
+
 def intersection_reserve_header(bits):
     if DISABLE_OPTIMIZED_INTERSECTION:
         return
@@ -87,11 +90,13 @@ def intersection(self, args):
     from intersection.chunk_bbox_intersection import intersection as intersect # Prevent circular import
     l_bin, r_bin = args
     s = time.perf_counter()
-
-    #res = intersect(args)
-    _, l_geo = self.decompress(l_bin)
-    _, r_geo = self.decompress(r_bin)
-    res = shapely.intersection(l_geo, r_geo)
+    
+    if not DISABLE_OPTIMIZED_INTERSECTION:
+        res = intersect(args)
+    else:
+        _, l_geo = self.decompress(l_bin)
+        _, r_geo = self.decompress(r_bin)
+        res = shapely.intersects(l_geo, r_geo)
 
     t = time.perf_counter()
 
