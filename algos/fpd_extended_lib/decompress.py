@@ -16,7 +16,7 @@ def sequence_decoder(bin, seq_list, delta_size):
     chk_size = bytes_to_uint(bin, D_CNT_SIZE)
 
     if LOAD_DT_BITSIZE:
-        delta_bytes_size = bytes_to_uint(bin, D_BITSIZE_SIZE)
+        delta_bytes_size = chk_size * delta_size * 2 - bytes_to_int(bin, D_BITSIZE_SIZE)
 
     # Extract reset point
     x = bytes_to_double(bin)

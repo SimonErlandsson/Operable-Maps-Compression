@@ -107,7 +107,7 @@ def fp_delta_encoding(geometry, d_size, deltas):
                 if cfg.COMPRESS_CHUNK: # Compress previous chunk
                     bits, chk_dt_bitsize = compress_chunk(bits, chk_hdr_offset, chk_dt_bitsize)
                 if STORE_DT_BITSIZE:
-                    bits[chk_hdr_offset + D_CNT_SIZE:chk_hdr_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = uint_to_ba(chk_dt_bitsize, D_BITSIZE_SIZE)
+                    bits[chk_hdr_offset + D_CNT_SIZE:chk_hdr_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = int_to_ba(chk_dt_cnt * d_size * 2 - chk_dt_bitsize, D_BITSIZE_SIZE)
 
             ###### ---- INITIALIZE NEW CHUNK ----- ######
             chk_dt_cnt, chk_dt_bitsize = 0, 0
@@ -159,7 +159,9 @@ def fp_delta_encoding(geometry, d_size, deltas):
 
     bits[chk_hdr_offset:chk_hdr_offset + D_CNT_SIZE] = uint_to_ba(chk_dt_cnt, D_CNT_SIZE)
     if STORE_DT_BITSIZE:
-        bits[chk_hdr_offset + D_CNT_SIZE:chk_hdr_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = uint_to_ba(chk_dt_bitsize, D_BITSIZE_SIZE)   
+        # Store the gain from compression/entropy coding
+        bits[chk_hdr_offset + D_CNT_SIZE:chk_hdr_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = int_to_ba(chk_dt_cnt * d_size * 2 - chk_dt_bitsize, D_BITSIZE_SIZE)
+   
     bits = intersection_append_header(bits)
     
     # util.pprint(bits)

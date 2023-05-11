@@ -88,8 +88,11 @@ def __unary_encode(value):
 def k_est(deltas):
     delta_mean = sum(deltas) / len(deltas)
     golden_ratio = (math.sqrt(5) + 1) / 2
-    return max(0, 1 + math.floor(math.log2(math.log(golden_ratio - 1) / math.log(delta_mean /(delta_mean + 1)))))
-
+    try:
+        return max(0, 1 + math.floor(math.log2(math.log(golden_ratio - 1) / math.log(delta_mean /(delta_mean + 1)))))
+    except:
+        return 0
+    
 #Overall
 def get_entropy_metadata(deltas, delta_size):
     '''
@@ -218,7 +221,7 @@ def decompress_chunk(bits, chk_dt_offset, chk_dt_bitsize):
         decompressed_bits = comp_dt_bits
     
     chk_header_offset = chk_dt_offset - 2 * FLOAT_SIZE - D_BITSIZE_SIZE - D_CNT_SIZE
-    before_bits[chk_header_offset + D_CNT_SIZE:chk_header_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = uint_to_ba(len(decompressed_bits), D_BITSIZE_SIZE) 
+    before_bits[chk_header_offset + D_CNT_SIZE:chk_header_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = int_to_ba(0, D_BITSIZE_SIZE) 
 
     before_bits += decompressed_bits
     before_bits += after_bits

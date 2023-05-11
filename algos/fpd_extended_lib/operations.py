@@ -50,7 +50,7 @@ def vertices(self, bin_in):
         deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
 
         if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
-            delta_bytes_size = bytes_to_uint(bin, D_BITSIZE_SIZE)
+            delta_bytes_size = deltas_in_chunk * delta_size * 2 - bytes_to_int(bin, D_BITSIZE_SIZE)
 
         # Extract reset point
         x = bytes_to_double(bin)

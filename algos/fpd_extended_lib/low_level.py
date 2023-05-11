@@ -65,6 +65,11 @@ def bytes_to_uint(bin, len):
     cfg.offset += len
     return val
 
+def bytes_to_int(bin, len):
+    val = util.ba2int(bin[cfg.offset:cfg.offset + len], signed=True)
+    cfg.offset += len
+    return val
+
 # Encode
 def double_to_bytes(x):
     if USE_DEFAULT_DOUBLE:
@@ -81,7 +86,7 @@ def double_as_long(num):
         return double_as_fpint(num)
     else:
         return var_float.bits_to_long(var_float.float_to_bin(num))
-
+    
 # Inline refactorized from https://github.com/ilanschnell/bitarray/blob/master/bitarray/util.py
 def uint_to_ba(x, length):
     if x == 0:
@@ -95,6 +100,12 @@ def uint_to_ba(x, length):
         return a
 
     return a[-length:] if la > length else util.zeros(length - la, "big") + a
+
+def int_to_ba(x, length):
+    '''
+        NOTE: Only used for signed ints!
+    '''
+    return util.int2ba(x, length, "big", True)
 
 def uchar_to_bytes(x):
     return x.to_bytes(1, 'big')

@@ -54,7 +54,6 @@ def intersection_skip_header(bin):
     if DISABLE_OPTIMIZED_INTERSECTION:
         return
     chk_cnt = struct.unpack_from('!I', bin, offset=cfg.offset//8)[0]
-    print(chk_cnt)
     cfg.offset += INTERSECTION_CHK_CNT_SIZE + 4 * FLOAT_SIZE * chk_cnt
 
 def get_chunk_bounds(bin_in):

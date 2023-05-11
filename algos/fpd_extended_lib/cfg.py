@@ -13,7 +13,7 @@ ENTROPY_METHOD = EM.NONE # 'HUFFMAN', 'GOLOMB', 'AUTO', 'NONE'.
 CHUNK_COMP_METHOD = CM.NONE # 'ZLIB', 'GZIP', 'NONE'
 
 # Size of data-structures
-D_BITSIZE_SIZE = 16 # Size used to store the size of the chunks OPTIMIZE
+D_BITSIZE_SIZE = 12 # Size used to store the size of the chunks OPTIMIZE
 POLY_RING_CNT_SIZE = required_bits(2048)
 RING_CHK_CNT_SIZE = 30
 MAX_NUM_DELTAS = 31  # Max number of deltas in a chunk before split

@@ -51,7 +51,6 @@ def get_chunks(bin_in, include_ring_start=True):
         # Loop through deltas in chunk
         for _ in range(deltas_in_chunk):
             x = bytes_to_decoded_coord(bin, x, delta_size)
-            print(x)
             y = bytes_to_decoded_coord(bin, y, delta_size)
             chunk.append([x, y])
         chunks.append(chunk)
@@ -102,10 +101,10 @@ def random_access(bin_in, idx, cache, get_chunk=False):
         deltas_in_chunk_offset = cfg.offset
         deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
 
+
+        delta_bytes_size = deltas_in_chunk * delta_size * 2
         if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
-            delta_bytes_size = bytes_to_uint(bin, D_BITSIZE_SIZE)
-        else:
-            delta_bytes_size = deltas_in_chunk * delta_size * 2
+            delta_bytes_size -= bytes_to_int(bin, D_BITSIZE_SIZE)
 
         if get_chunk and cur_idx == idx:
             # Looking for whole chunk, found it
@@ -150,7 +149,7 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
     cfg.offset = chk_offset
     deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
     if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
-        delta_bytes_size = bytes_to_uint(bin, D_BITSIZE_SIZE)
+        delta_bytes_size = deltas_in_chunk * delta_size * 2 - bytes_to_int(bin, D_BITSIZE_SIZE)
     
     if idx == None:
         idx = deltas_in_chunk
