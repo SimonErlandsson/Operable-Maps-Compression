@@ -8,7 +8,7 @@ sys.path.append(str(root))
 from algos.base import CompressionAlgorithm
 from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import *
 from algos.fpd_extended_lib.add_vertex import *
-from algos.fpd_extended_lib.functions import *
+from algos.fpd_extended_lib.operations import *
 from algos.fpd_extended_lib.helpers import *
 from algos.fpd_extended_lib.compress import *
 from algos.fpd_extended_lib.decompress import *

@@ -1,16 +1,25 @@
 import shapely
 import json
+import random
+import pandas as pd
+import geopandas as gpd
+import glob
+import tqdm
+import json
 
-def read_dataset(DATASET_PATH = "data/lund_building_highway.json"):
-    import random
-    import pandas as pd
-    import json
+def load_shp_files(base_loc):
+    df = gpd.GeoDataFrame()
+    files = glob.glob(base_loc + '/*.shp')
+    for i in tqdm.tqdm(range(len(files))):
+        f = files[i]
+        print(i + 1, ':', f)
+        to_append = gpd.read_file(f)
+        print(i + 1, 'contains', len(to_append), 'geometries')
+        df = gpd.pd.concat([df, to_append], copy=False)
+    return df, list(range(len(df)))
+
+def read_dataset(DATASET_PATH = "data/lund_building_highway.json", NBR_ITER = -1):
     #DATASET_PATH = "data/world.json"
-    NBR_ITER = 16000
-
-    SEED = 123 # If we want to enforce the same ordering and indexes for multiple runs, else None
-    random.seed(SEED) # Init random
-
     # Extract the nested feature attribute of the geo_json file containing the geometries
     with open(DATASET_PATH, 'r') as f:
         data = json.loads(f.read())
@@ -19,9 +28,11 @@ def read_dataset(DATASET_PATH = "data/lund_building_highway.json"):
     df = pd.DataFrame(
         {'type': file_df['geometry.type'], 'coordinates': file_df['geometry.coordinates']})
 
-    max_idx = len(df) - 1
-    unary_idxs = [random.randint(0, max_idx) for i in range(NBR_ITER)] # Generate list of indexes to query on
-    random.seed(SEED) # Reset random
+    if NBR_ITER != -1:
+        max_idx = len(df) - 1
+        unary_idxs = [random.randint(0, max_idx) for i in range(NBR_ITER)] # Generate list of indexes to query on
+    else:
+        unary_idxs = list(range(len(df)))
     return df, unary_idxs
 
 def parse_intersection_data(file_name, max_shps=999999999, strip_precision=False):

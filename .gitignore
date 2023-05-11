@@ -3,6 +3,7 @@ reports/
 .DS_Store
 data/*
 
+!data/entropy_models
 !data/intersection
 !data/sweden.json
 

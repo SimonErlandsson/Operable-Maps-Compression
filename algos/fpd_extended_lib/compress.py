@@ -6,7 +6,6 @@ import time
 from shapely import GeometryType as GT
 from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import *
 from algos.fpd_extended_lib.low_level import *
-from algos.fpd_extended_lib.helpers import get_zz_encoded_delta
 from algos.fpd_extended_lib.entropy_coder import encode, get_entropy_metadata, compress_chunk
 
 def get_zz_encoded_delta(prev_coord, curr_coord):
@@ -38,19 +37,19 @@ def point_count(geometry):
     return ring_count
 
 def append_header(bits, geometry, d_size, deltas):
-    (cfg.ENTROPY_METHOD, cfg.USE_ENTROPY,cfg.ENTROPY_PARAM) = get_entropy_metadata(deltas, d_size)
+    (cfg.ENTROPY_METHOD, cfg.USE_ENTROPY, cfg.ENTROPY_PARAM) = get_entropy_metadata(deltas, d_size)
     # Meta data
     bits.frombytes(uchar_to_bytes(d_size))
     bits.frombytes(uchar_to_bytes(int(shapely.get_type_id(geometry))))  # 1 byte is enough for storing type
     bits.frombytes(uchar_to_bytes(cfg.ENTROPY_PARAM))
     # Bounding Box
-    bounds = shapely.bounds(geometry)
-    bits.frombytes(double_to_bytes(bounds[0]))
-    bits.frombytes(double_to_bytes(bounds[1]))
-    bits.frombytes(double_to_bytes(bounds[2]))
-    bits.frombytes(double_to_bytes(bounds[3]))
+    if not DISABLE_OPTIMIZED_BOUNDING_BOX:
+        bounds = shapely.bounds(geometry)
+        bits.frombytes(double_to_bytes(bounds[0]))
+        bits.frombytes(double_to_bytes(bounds[1]))
+        bits.frombytes(double_to_bytes(bounds[2]))
+        bits.frombytes(double_to_bytes(bounds[3]))
     intersection_reserve_header(bits)
-
 
 def append_delta_pair(bits, d_x_zig, d_y_zig, d_size):
         x_bytes = uint_to_ba(d_x_zig, d_size)
@@ -62,13 +61,12 @@ def append_delta_pair(bits, d_x_zig, d_y_zig, d_size):
         bits.extend(y_bytes)
         return (d_size, d_size) if not cfg.USE_ENTROPY else (len_x, len_y)
 
-
 def fp_delta_encoding(geometry, d_size, deltas):
-    cfg.ENTROPY_STATE = (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY)
     # List of resulting bytes.
     bits = bitarray(endian='big')
     # Init with 'd_size', 'geom_type'
     append_header(bits, geometry, d_size, deltas)
+    STORE_DT_BITSIZE = cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY
 
     # Type specific variables
     geo_type = shapely.get_type_id(geometry)
@@ -81,18 +79,12 @@ def fp_delta_encoding(geometry, d_size, deltas):
     ring_buffer = poly_buffer if is_polygon else []  # Not nestled for poly, else overwritten below
 
     prev_x, prev_y = 0, 0  # Absolute value of previous coord
-    chk_deltas = 0  # Cnt of 'deltas in chunk'
-    chk_deltas_bytes = 0  # Cnt of 'deltas in chunk'
+    chk_dt_cnt = 0  # Cnt of 'deltas in chunk'
+    chk_dt_bitsize = 0  # Size of 'deltas in chunk'
     chk_hdr_offset = 0  # Pointer to 'deltas of chunk'
     num_chks_ring = 0  # Cnt of 'number of chunks for current ring'
     num_chks_ring_idx = 0  # Pointer to latest 'number of chunks for ring'
     rem_points_ring = 0  # Cnt of 'points left to process in current ring'
-
-    intersection_chunk_bboxes = []
-    def intersection_add_point(x, y, previous_chunk=False):
-        i = -2 if previous_chunk else -1
-        x_l, y_b, x_r, y_t = intersection_chunk_bboxes[i]
-        intersection_chunk_bboxes[i] = [min(x, x_l), min(y, y_b), max(x, x_r), max(y, y_t)]
 
     # Loop all coordinates
     for x, y in shapely.get_coordinates(geometry):
@@ -108,19 +100,19 @@ def fp_delta_encoding(geometry, d_size, deltas):
         prev_x, prev_y = (x, y)
 
         # ---- CREATE NEW CHUNK? If 'first chunk', 'delta doesn't fit', 'new ring', or 'reached max deltas'
-        if chk_hdr_offset == 0 or not deltas_fit_in_bits(d_x_zig, d_y_zig, d_size) or rem_points_ring == 0 or chk_deltas == MAX_NUM_DELTAS:
+        if chk_hdr_offset == 0 or not deltas_fit_in_bits(d_x_zig, d_y_zig, d_size) or rem_points_ring == 0 or chk_dt_cnt == MAX_NUM_DELTAS:
             # If not 'first chunk' -> save previous chunk's size
             if chk_hdr_offset != 0:
-                if COMPRESS_CHUNK:
-                    bits, chk_deltas_bytes = compress_chunk(bits, chk_hdr_offset, chk_deltas_bytes)
-
-                bits[chk_hdr_offset:chk_hdr_offset + D_CNT_SIZE] = uint_to_ba(chk_deltas_bytes, D_CNT_SIZE)
-                bits[chk_hdr_offset + D_CNT_SIZE :chk_hdr_offset + D_CNT_SIZE * 2] = uint_to_ba(chk_deltas, D_CNT_SIZE)
+                bits[chk_hdr_offset:chk_hdr_offset + D_CNT_SIZE] = uint_to_ba(chk_dt_cnt, D_CNT_SIZE)
+                if cfg.COMPRESS_CHUNK: # Compress previous chunk
+                    bits, chk_dt_bitsize = compress_chunk(bits, chk_hdr_offset, chk_dt_bitsize)
+                if STORE_DT_BITSIZE:
+                    bits[chk_hdr_offset + D_CNT_SIZE:chk_hdr_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = int_to_ba(chk_dt_cnt * d_size * 2 - chk_dt_bitsize, D_BITSIZE_SIZE)
 
             ###### ---- INITIALIZE NEW CHUNK ----- ######
-            chk_deltas, chk_deltas_bytes = 0, 0
-
-            intersection_chunk_bboxes.append([x, y, x, y])
+            chk_dt_cnt, chk_dt_bitsize = 0, 0
+            intersection_new_chunk()
+            intersection_add_point(x, y)
 
             ### __ RING/MULTI-POLYGON META-DATA __ ###
             if not is_linestring:
@@ -141,14 +133,17 @@ def fp_delta_encoding(geometry, d_size, deltas):
                     intersection_add_point(x, y, previous_chunk=True)
                     
              #add next chunks first point to bounding box
-            if is_linestring and len(intersection_chunk_bboxes) > 1:
+            if is_linestring and get_chunk_bboxes_len() > 1:
                 intersection_add_point(x, y, previous_chunk=True)
 
             ### __ ------------ END ------------- __ ###
 
             # Preparing chunk size (number of deltas)
             chk_hdr_offset = len(bits)
-            bits.extend(uint_to_ba(0, D_CNT_SIZE * 2))  # Reserve space for size
+            bits.extend(uint_to_ba(0, D_CNT_SIZE)) # Reserve space for 'chk_dt_cnt'
+            if STORE_DT_BITSIZE:
+                # Size of chunk is needed when variable-length compression is used
+                bits.extend(uint_to_ba(0, D_BITSIZE_SIZE)) # Reserve space for bit size of deltas
 
             # Add full coordinates
             bits.frombytes(double_to_bytes(x))
@@ -156,25 +151,26 @@ def fp_delta_encoding(geometry, d_size, deltas):
         else:
             # Delta fits, append it
             (len_x, len_y) = append_delta_pair(bits, d_x_zig, d_y_zig, d_size)
-            chk_deltas += 1
-            chk_deltas_bytes += len_x + len_y
-
+            chk_dt_cnt += 1
+            chk_dt_bitsize += len_x + len_y
             intersection_add_point(x, y)
 
         # Coord has been processed, remove it
         rem_points_ring -= 1
 
     # All points processed. Update size of final chunk
-    if COMPRESS_CHUNK:
-        bits, chk_deltas_bytes = compress_chunk(bits, chk_hdr_offset, chk_deltas_bytes)
+    if cfg.COMPRESS_CHUNK:
+        bits, chk_dt_bitsize = compress_chunk(bits, chk_hdr_offset, chk_dt_bitsize)
 
-    bits[chk_hdr_offset:chk_hdr_offset + D_CNT_SIZE] = uint_to_ba(chk_deltas_bytes, D_CNT_SIZE)
-    bits[chk_hdr_offset + D_CNT_SIZE :chk_hdr_offset + D_CNT_SIZE * 2] = uint_to_ba(chk_deltas, D_CNT_SIZE)    
-    bits = intersection_append_header(bits, intersection_chunk_bboxes)
+    bits[chk_hdr_offset:chk_hdr_offset + D_CNT_SIZE] = uint_to_ba(chk_dt_cnt, D_CNT_SIZE)
+    if STORE_DT_BITSIZE:
+        # Store the gain from compression/entropy coding
+        bits[chk_hdr_offset + D_CNT_SIZE:chk_hdr_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = int_to_ba(chk_dt_cnt * d_size * 2 - chk_dt_bitsize, D_BITSIZE_SIZE)
+   
+    bits = intersection_append_header(bits)
     
     # util.pprint(bits)
-    # print([int.from_bytes(i, 'big') for i in bytes], '\n')
-    (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY) = cfg.ENTROPY_STATE
+    #print([int.from_bytes(i, 'big') for i in bits.tobytes()], '\n')
     return bits.tobytes()
 
 def calculate_delta_size(geometry, return_deltas=False):
@@ -212,7 +208,9 @@ def calculate_delta_size(geometry, return_deltas=False):
 
 def compress(self, geometry):
     s = time.perf_counter()
+    cfg.ENTROPY_STATE = (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY)
     optimal_size, _, deltas = calculate_delta_size(geometry, True)
     bin = fp_delta_encoding(geometry, optimal_size, deltas[1])
+    (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY) = cfg.ENTROPY_STATE
     t = time.perf_counter()
     return t - s, bin
