@@ -5,7 +5,7 @@ CM = Enum('CM', ['ZLIB', 'GZIP', 'ARITHMETIC', 'NONE'])
 required_bits = lambda x: int(np.ceil(np.log2(x + 1)))
 
 # If true: use "normal" FPD, else use "32-bit integer reprs.".
-USE_DEFAULT_DOUBLE = False
+USE_DEFAULT_DOUBLE = True
 
 # Enable per delta entropy compression
 ENTROPY_METHOD = EM.NONE # 'HUFFMAN', 'GOLOMB', 'AUTO', 'NONE'.
@@ -22,6 +22,9 @@ D_CNT_SIZE = required_bits(MAX_NUM_DELTAS + 1)
 # Disable optimized FPDE operations
 DISABLE_OPTIMIZED_INTERSECTION = False
 DISABLE_OPTIMIZED_BOUNDING_BOX = False
+
+OPTIMIZED = True
+POINT_ERR_TOL = 1e-12 if USE_DEFAULT_DOUBLE else 1e-10
 
 # Do not tweak manually
 binary_length = 0 # Used when parsing

@@ -16,6 +16,9 @@ chunk_bounds_offset = -1
 
 INTERSECTION_CHK_CNT_SIZE = 32
 
+def get_chunk_bboxes_len():
+    return len(chunk_bboxes)
+
 def intersection_reserve_header(bits):
     if DISABLE_OPTIMIZED_INTERSECTION:
         return
