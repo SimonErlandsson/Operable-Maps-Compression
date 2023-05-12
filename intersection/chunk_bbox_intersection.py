@@ -23,14 +23,14 @@ def are_lines_parallel(seg1, seg2):
         return ((y2 - y1) / (x2 - x1) if (x2 - x1) != 0 else float('inf')) == ((y4 - y3) / (x4 - x3) if (x4 - x3) != 0 else float('inf'))
      
 
-###@profile
+##@profile
 def is_bboxs_intersecting(bbox_1, bbox_2):
     """Calculates if two given bounding boxes overlap"""
 
     #Calculates if two given bounding boxes overlap
     return min(bbox_1[2], bbox_2[2]) >= max(bbox_1[0], bbox_2[0]) and min(bbox_1[3], bbox_2[3]) >= max(bbox_1[1], bbox_2[1])
 
-###@profile
+##@profile
 def common_bbox(bins):  
     """Calculate the common bounding box from two FPDE compressed binaries"""
 
@@ -69,7 +69,7 @@ def common_bbox(bins):
 #chunks_bounds, _ = calculate_chunks_bounds(bin)
 # --------- /END/ METHODS REQUIRING IMPLEMENTATIONS IN FPDE ---------------
 
-###@profile
+##@profile
 def get_chunks_idxs_within_bounds(bin, bbox, get_geom_bounds=False):
     """Get chunk indexes in FPDE binary containing a segment connected to the given bounding box.
     Also return the bounds of the geometry if get_geom_bounds=True"""
@@ -81,10 +81,10 @@ def get_chunks_idxs_within_bounds(bin, bbox, get_geom_bounds=False):
 
 get_chunk = lambda bin, idx: fpd.get_chunk(bin, idx)[0] # Can also use slow above for debugging
 
-###@profile
+##@profile
 def chunk_to_shape(chk): return LineString(chk) if len(chk) != 1 else  Point(chk[0]) #Convert chunk segments to shapely object
 
-###@profile
+##@profile
 def is_contained_within(containee, container, container_bounds, debug_correct_ans=None, plot_all=False, cache=None):
     '''
     Containee is either FPDE binary object or a tuple of coordinates. Uses Ray Casting algorithm to
@@ -147,7 +147,7 @@ def is_contained_within(containee, container, container_bounds, debug_correct_an
 
     return len(intersecting_points) % 2 == 1
 
-###@profile
+##@profile
 def is_point_on_segment(x1, y1, x2, y2 , x, y):
     """Checks if a point is on a segment"""
 
@@ -164,7 +164,7 @@ def is_point_on_segment(x1, y1, x2, y2 , x, y):
 
 # Based on the common bbox, extracts the chunks for both geometries within the bbox,
 # and performs intersection testing between the line segments.
-@profile
+#@profile
 def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=False, cache=None):
     """Based on the common bbox, extracts the chunks for both geometries within the bbox,
     and performs intersection testing between the line segments."""
@@ -243,18 +243,13 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
                                     cross_to_seg[p_idx][s].append(seg_idx)
                                     if found:
                                         break
-                                    found = True
-
-                            
-                                    
-                                    
-
-        #Avoid sorting if predicate intersection
-        if res_list != None:
+                                    found = True 
+       
+    if res_list != None:
             for s in range(2):
-                for seg_idx in range(len(seg_to_cross[s])):    
+                for seg_idx in seg_to_cross[s]:    
                     seg_to_cross[s][seg_idx].sort(key=lambda x: math.dist(segments[s][seg_idx][0],intersecting_points[x])) # Sort ordered by distance from p[0]
-    
+
     if len(intersecting_points) == 0:
         return False, bounds 
     
@@ -341,7 +336,7 @@ def possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to
     # print("")
     # DEBUG_print_paths(possible_paths)
     return possible_paths
-#@profile
+@profile
 def intersection(bins, debug_correct_ans=None, plot_all=False):
     cache = [{},{}]
     bbox, overlap_type = common_bbox(bins)
