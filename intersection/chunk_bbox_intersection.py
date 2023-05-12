@@ -11,25 +11,6 @@ import itertools
 import bisect 
 
 
-def is_segment_on_top(segment1, segment2):
-    x1, y1 = segment1[0]
-    x2, y2 = segment1[1]
-    x3, y3 = segment2[0]
-    x4, y4 = segment2[1]
-
-    # Check if the segments have the same slope
-    slope_segment1 = (y2 - y1) / (x2 - x1) if (x2 - x1) != 0 else float('inf')
-    slope_segment2 = (y4 - y3) / (x4 - x3) if (x4 - x3) != 0 else float('inf')
-
-    if slope_segment1 != slope_segment2:
-        return False
-
-    # Check if segment1 is on top of segment2
-    if y1 > y3 and y2 > y4:
-        return True
-
-    return False
-
 fpd = FpdExtended()
 
 
@@ -42,14 +23,14 @@ def are_lines_parallel(seg1, seg2):
         return ((y2 - y1) / (x2 - x1) if (x2 - x1) != 0 else float('inf')) == ((y4 - y3) / (x4 - x3) if (x4 - x3) != 0 else float('inf'))
      
 
-#@profile
+##@profile
 def is_bboxs_intersecting(bbox_1, bbox_2):
     """Calculates if two given bounding boxes overlap"""
 
     #Calculates if two given bounding boxes overlap
     return min(bbox_1[2], bbox_2[2]) >= max(bbox_1[0], bbox_2[0]) and min(bbox_1[3], bbox_2[3]) >= max(bbox_1[1], bbox_2[1])
 
-#@profile
+##@profile
 def common_bbox(bins):  
     """Calculate the common bounding box from two FPDE compressed binaries"""
 
@@ -88,7 +69,7 @@ def common_bbox(bins):
 #chunks_bounds, _ = calculate_chunks_bounds(bin)
 # --------- /END/ METHODS REQUIRING IMPLEMENTATIONS IN FPDE ---------------
 
-#@profile
+##@profile
 def get_chunks_idxs_within_bounds(bin, bbox, get_geom_bounds=False):
     """Get chunk indexes in FPDE binary containing a segment connected to the given bounding box.
     Also return the bounds of the geometry if get_geom_bounds=True"""
@@ -100,10 +81,10 @@ def get_chunks_idxs_within_bounds(bin, bbox, get_geom_bounds=False):
 
 get_chunk = lambda bin, idx: fpd.get_chunk(bin, idx)[0] # Can also use slow above for debugging
 
-#@profile
+##@profile
 def chunk_to_shape(chk): return shapely.LineString(chk) if len(chk) != 1 else  shapely.Point(chk[0]) #Convert chunk segments to shapely object
 
-#@profile
+##@profile
 def is_contained_within(containee, container, container_bounds, debug_correct_ans=None, plot_all=False, cache=None):
     '''
     Containee is either FPDE binary object or a tuple of coordinates. Uses Ray Casting algorithm to
@@ -129,7 +110,7 @@ def is_contained_within(containee, container, container_bounds, debug_correct_an
         return False
     
     #Create ray
-    ray_end = min(distances, key=lambda x: np.linalg.norm(x))
+    ray_end = min(distances, key=lambda x: x[0]**2 + x[1]**2)
     ray_end = (x + ray_end[0], y + ray_end[1])
     ray = shapely.LineString([(x, y), ray_end])
     ray_bound = ray.bounds
@@ -166,26 +147,18 @@ def is_contained_within(containee, container, container_bounds, debug_correct_an
 
     return len(intersecting_points) % 2 == 1
 
-#@profile
-def is_point_on_segment(seg, pt):
+##@profile
+def is_point_on_segment(x1, y1, x2, y2 , x, y):
     """Checks if a point is on a segment"""
-    x, y = pt
-    x1, y1 = seg[0]
-    x2, y2 = seg[1]
-    
-    cross = (y - y1) * (x2 - x1) - (x - x1) * (y2 - y1)
 
     # Check if the point is collinear with the segment
-    if abs(cross) > POINT_ERR_TOL:
+    if abs((y - y1) * (x2 - x1) - (x - x1) * (y2 - y1)) > POINT_ERR_TOL:
         return False
 
     dot = (x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)
-    seg_length = (x2 - x1) ** 2 + (y2 - y1) ** 2
 
     #POINT_ERR_TOL for robustness in internal approximation errors
-    if dot < -POINT_ERR_TOL or dot > seg_length + POINT_ERR_TOL: 
-        return False
-    return True
+    return not(dot < -POINT_ERR_TOL or dot > (x2 - x1) ** 2 + (y2 - y1) ** 2 + POINT_ERR_TOL)
 
    
 
@@ -264,7 +237,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
                         for seg in chk_segs: #Go through each of those segments   
                             seg_idx = seg_idxs[s][seg] #Get the correct segment index !O(n)!
                             if not seg_idx in cross_to_seg[p_idx][s]:
-                                if is_point_on_segment(seg, p): #Wierdest
+                                if is_point_on_segment(seg[0][0], seg[0][1], seg[1][0], seg[1][1], p[0], p[1]):
                                 #Checking if a segment intersect with intersection point or line
                                     seg_to_cross[s][seg_idx].append(p_idx)
                                     cross_to_seg[p_idx][s].append(seg_idx)
@@ -345,15 +318,16 @@ def possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to
     valid_paths = set()
     for i in range(nbr_paths):
         for j in range(i + 1, nbr_paths):
-            s1, seg_idx1, v_idxs1, _ = possible_paths[i]
-            s2, seg_idx2, v_idxs2, _ = possible_paths[j]
-            if s1 != s2 and j in paths_to_check and i in paths_to_check:
-                if are_lines_parallel([seg_to_point(s1, seg_idx1, v_idxs1[0]), seg_to_point(s1, seg_idx1, v_idxs1[1])], [seg_to_point(s2, seg_idx2, v_idxs2[0]), seg_to_point(s2, seg_idx2, v_idxs2[1])]):
-                    valid_paths.add(possible_paths[i])
-                    valid_paths.add(possible_paths[j])
-                    paths_to_check.discard(i)
-                    paths_to_check.discard(j)
-                    break
+            if j in paths_to_check and i in paths_to_check:
+                s1, seg_idx1, v_idxs1, _ = possible_paths[i]
+                s2, seg_idx2, v_idxs2, _ = possible_paths[j]
+                if s1 != s2: 
+                    if are_lines_parallel([seg_to_point(s1, seg_idx1, v_idxs1[0]), seg_to_point(s1, seg_idx1, v_idxs1[1])], [seg_to_point(s2, seg_idx2, v_idxs2[0]), seg_to_point(s2, seg_idx2, v_idxs2[1])]):
+                        valid_paths.add(possible_paths[i])
+                        valid_paths.add(possible_paths[j])
+                        paths_to_check.discard(i)
+                        paths_to_check.discard(j)
+                        break
 
     possible_paths = list(filter(lambda p: is_contained_within(seg_to_middle_point(*p[0:3]), bins[(p[0] + 1) % 2], bounds[(p[0] + 1) % 2],cache=cache[(p[0] + 1) % 2]), [possible_paths[i] for i in paths_to_check]))
     valid_paths.update(possible_paths)
@@ -397,10 +371,11 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
 
     # Takes a segment and vertex_index (can be > 2 if cross-point, idx 0 is beg, idx 1 is end)
     def seg_to_point(s, seg_idx, v_idx):
-        if v_idx > 1:
-            return intersecting_points[seg_to_cross[s][seg_idx][v_idx - 2]]
-        else:
+        if v_idx <= 1:
             return segments[s][seg_idx][v_idx]
+        else:
+            return intersecting_points[seg_to_cross[s][seg_idx][v_idx - 2]]
+
 
     # Find the point in the middle of the segment, taking into account cross points
     def seg_to_middle_point(s, seg_idx, v_idxs):
