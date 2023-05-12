@@ -38,7 +38,7 @@ COMPRESS_CHUNK = CHUNK_COMP_METHOD != CM.NONE
 
 # Use "custom float size": TODO: Seems broken now
 EXPONENT = 6 # Always defined, but not used if below are commented out
-# FLOAT_SIZE = 35
+# FLOAT_SIZE = 40  #Has to be multiple of 8
 # USE_FPINT = False
 # USE_DEFAULT_DOUBLE = False
 

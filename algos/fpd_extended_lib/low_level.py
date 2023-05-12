@@ -3,6 +3,8 @@ from var_float import VarFloat
 from algos.fpd_extended_lib.cfg import *
 import algos.fpd_extended_lib.cfg as cfg
 import struct
+from algos.fpd_extended_lib.entropy_coder import decode
+
 
 var_float = VarFloat(EXPONENT, FLOAT_SIZE)
 
@@ -24,12 +26,16 @@ def fpint_as_double(num):
     res = round(float(integral_part + "." + decimal_part) - 180, 7)
     return res
 
+
+def ba2int_optimized(__a):
+    return int.from_bytes((util.zeros(8 - len(__a) % 8, "big") + __a).tobytes(), byteorder="big")
+
 # Decode
 def bin_to_double(bin):
     if USE_DEFAULT_DOUBLE:
         return struct.unpack('!d', bin)[0]
     elif USE_FPINT:
-        return long_as_double(util.ba2int(bin, signed=False))
+        return long_as_double(ba2int_optimized(bin))
     else:
         return var_float.bin_to_float(bin)
     
@@ -42,13 +48,12 @@ def long_as_double(long):
         return var_float.bin_to_float(var_float.long_to_bits(long))
 
 def bytes_to_decoded_coord(bin, prev_coord, input_size=64):
-    from algos.fpd_extended_lib.entropy_coder import decode
     if cfg.USE_ENTROPY:
         bin, input_size = decode(bin[cfg.offset:], input_size)
     else: 
         bin = bin[cfg.offset: cfg.offset + input_size]
 
-    val = util.ba2int(bin, signed=False)
+    val = ba2int_optimized(bin)
     val = zz_decode(val) + double_as_long(prev_coord)
     val = long_as_double(val)
     cfg.offset += input_size
@@ -61,7 +66,7 @@ def bytes_to_double(bin):
     return val
 
 def bytes_to_uint(bin, len):
-    val = util.ba2int(bin[cfg.offset:cfg.offset + len], signed=False)
+    val = ba2int_optimized(bin[cfg.offset:cfg.offset + len])
     cfg.offset += len
     return val
 
