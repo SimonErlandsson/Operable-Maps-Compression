@@ -164,7 +164,7 @@ def is_point_on_segment(x1, y1, x2, y2 , x, y):
 
 # Based on the common bbox, extracts the chunks for both geometries within the bbox,
 # and performs intersection testing between the line segments.
-#@profile
+@profile
 def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=False, cache=None):
     """Based on the common bbox, extracts the chunks for both geometries within the bbox,
     and performs intersection testing between the line segments."""
@@ -241,10 +241,11 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
                                 #Checking if a segment intersect with intersection point or line
                                     seg_to_cross[s][seg_idx].append(p_idx)
                                     cross_to_seg[p_idx][s].append(seg_idx)
+                                    if found:
+                                        break
                                     found = True
-                                    continue
-                            if found:
-                                break
+
+                            
                                     
                                     
 
