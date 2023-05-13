@@ -70,32 +70,45 @@ def get_chunks(bin_in, include_next_start=True):
 def access_vertex(bin_in, idx, cache=[]):
     return random_access(bin_in, idx, cache, get_chunk=False)
 
-def access_chunk(bin_in, idx, cache=[]):
+def access_chunk(bin_in, idx, offset_cache=None, cache=[]):
     """
     Get a chunk based on chunk index. Note that
     chunks are connected. I.e. each chunk contains the
     next point in sequence.
     """
-    return random_access(bin_in, idx, cache, get_chunk=True)
+    return random_access(bin_in, idx, cache, offset_cache=offset_cache, get_chunk=True)
 
 
 # Supply cache if used repeatedly for same shape
-def random_access(bin_in, idx, cache, get_chunk=False):
+#@profile
+def random_access(bin_in, idx, cache, offset_cache=None, get_chunk=False):
     old_offset = cfg.offset
-    cfg.offset = 0
     bin = bitarray(endian='big')
     bin.frombytes(bin_in)
     cfg.binary_length = len(bin)
-    delta_size, type = decode_header(bin)
+
+    #Use offset_cache if possible
+    if offset_cache != None and  len(offset_cache)  != 0:
+        #Go to last index before the requested one, else go directly to it 
+        delta_size, type, cur_idx, chunks_in_ring_left, rings_left, cfg.offset, ring_start_offset = offset_cache[idx if len(offset_cache) > idx else len(offset_cache)  - 1] 
+
+    else:
+            cfg.offset = 0
+            ring_start_offset = None
+            delta_size, type = decode_header(bin)
+            cur_idx = 0
+            chunks_in_ring_left = 0  # Used for iteration
+            rings_left = 0
 
     # Type specific variables
     is_linestring = type == GT.LINESTRING
     is_multipolygon = type == GT.MULTIPOLYGON
-
-    cur_idx = 0
-    chunks_in_ring_left = 0  # Used for iteration
-    rings_left = 0
+    
+   
     while (cur_idx <= idx):
+        if offset_cache != None and cur_idx not in offset_cache:
+            offset_cache[cur_idx] = delta_size, type, cur_idx, chunks_in_ring_left, rings_left, cfg.offset, ring_start_offset
+
         if is_multipolygon and rings_left == 0:
             rings_left = bytes_to_uint(bin, POLY_RING_CNT_SIZE)
         if not is_linestring and chunks_in_ring_left == 0:

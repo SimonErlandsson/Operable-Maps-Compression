@@ -35,9 +35,9 @@ class FpdExtended(CompressionAlgorithm):
 
     # Export some helper functions
     get_chunks = lambda self, bin, include_ring_start=True: get_chunks(bin, include_ring_start)
-    access_vertex_chk = lambda self, bin, chk_offset, delta_size, idx, cache=None: access_vertex_chk(bin, chk_offset, delta_size, idx, cache)
+    access_vertex_chk = lambda self, bin, chk_offset, delta_size, idx, cache=None: access_vertex_chk(bin, chk_offset, delta_size, idx, cache=cache)
     access_vertex = lambda self, bin, access_idx, cache=[]: access_vertex(bin, access_idx, cache)
-    get_chunk = lambda self, bin, access_idx, cache=[]: access_chunk(bin, access_idx, cache)
+    get_chunk = lambda self, bin, access_idx, offset_cache=None, cache=[]: access_chunk(bin, access_idx, offset_cache=offset_cache, cache=cache)
 
     # Intersection
     get_chunk_bounds = lambda self, bin: get_chunk_bounds(bin)
@@ -72,7 +72,7 @@ def main():
     # binary_intersection = intersection.first_bin_search.binary_intersection
     # chunk_bbox_is_intersecting = intersection.chunk_bbox_intersection.is_intersecting
     chunk_bbox_intersection = intersection.chunk_bbox_intersection.intersection
-    #lund_data, lund_data_stats = parse_intersection_data("lund.json", 100)
+    lund_data, lund_data_stats = parse_intersection_data("lund.json", 100)
     world_data, world_data_stats = parse_intersection_data("world.json", 10)
 
 

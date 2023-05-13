@@ -79,7 +79,7 @@ def get_chunks_idxs_within_bounds(bin, bbox, get_geom_bounds=False):
     return chk_idxs if not get_geom_bounds else (chk_idxs, dict(zip(range(len(chunks_bounds)),chunks_bounds)))
 
 
-get_chunk = lambda bin, idx: fpd.get_chunk(bin, idx)[0] # Can also use slow above for debugging
+get_chunk = lambda bin, idx, offset_cache=None: fpd.get_chunk(bin, idx, offset_cache=offset_cache)[0] # Can also use slow above for debugging
 
 ##@profile
 def chunk_to_shape(chk): return LineString(chk) if len(chk) != 1 else  Point(chk[0]) #Convert chunk segments to shapely object
@@ -176,6 +176,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
     polylines = [[], []]
     segments =  [[], []]
     seg_idxs =  [[], []]
+    offset_cache = [{}, {}]
 
     #For not needing to recalculate boudning boxes and polylines in common bb
     chk_coords =    [[], []]
@@ -189,7 +190,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
     for i in range(2):
         chk_idxs[i], bounds[i] = get_chunks_idxs_within_bounds(bins[i], bbox, get_geom_bounds=True) #Get all bounds for a geometry as well as idxes which overlap in common bounding box
        
-        chk_coords[i] = {c_i: get_chunk(bins[i], c_i) for c_i in chk_idxs[i]} # Get chunk -> coordinates for those inside common boudning box
+        chk_coords[i] = {c_i: get_chunk(bins[i], c_i, offset_cache=offset_cache[i]) for c_i in chk_idxs[i]} # Get chunk -> coordinates for those inside common boudning box
         
         chk_polylines[i] = {c_i: chunk_to_shape(coords) for c_i, coords in chk_coords[i].items()} #Chunk -> polylines used in isintersection checks
         for c_i, shape in chk_polylines[i].items():
@@ -288,11 +289,13 @@ def is_intersecting(bins, debug_correct_ans=None, plot_all=False):
 
 # Returns the possible paths (directed segment) from an intersection point. Also checks that it is within both shapes.
 #@profile
-def possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to_middle_point, bins, cache):
+def possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to_middle_point, bins, cache, processed_ways):
     possible_paths = []
     seg_idxs = cross_to_seg[c_i]
     for s in range(2): # Both shapes
         for seg_idx in seg_idxs[s]: # Enumerate the segments containing crosspoint with id c_i
+            if seg_idx in processed_ways[c_i][s]: # Skip processed
+                continue
             seg_cross_cnt = len(seg_to_cross[s][seg_idx])
             # Get possible successor points
             # Where is the current cross?
@@ -402,39 +405,34 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
     visited_edges = set()
     while len(cross_left) > 0:
         c_i = cross_left.pop() # Take one cross-point
-        paths = possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to_middle_point, bins, cache)
+        paths = possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to_middle_point, bins, cache, processed_ways)
         if len(paths) == 0:
             res_points.append(intersecting_points[c_i])
         while len(paths) > 0:
             path = paths.pop() # Process one path
 
             s, seg_idx, v_idxs, p_dir = path # V_idxs contains: start_idx, end_index. Can also be cross-points!
-            start_idx = 0 if p_dir == 1 else 1 # Start index. Avoids creating segments which are flipped
-            end_idx = 1 if p_dir == 1 else 0
-
-            if seg_idx in processed_ways[c_i][s]: # Skip processed
-                continue
+            
             
             path_segs = deque()
-            path_append = path_segs.append if p_dir == 1 else lambda x: path_segs.insert(0, x)
+            path_append = path_segs.append
             while True: # While no cross point
 
-                v1, v2 = seg_to_point(s, seg_idx, v_idxs[start_idx]), seg_to_point(s, seg_idx, v_idxs[end_idx])
+                v1, v2 = seg_to_point(s, seg_idx, v_idxs[0]), seg_to_point(s, seg_idx, v_idxs[1])
                 
                 #Add front and back edges to visited edges set
                 if (v1, v2) not in visited_edges and (v2, v1) not in visited_edges:
                     path_append([v1, v2]) # Add segment to resulting shape a
-                    visited_edges.add((v1, v2))
-                    visited_edges.add((v2, v1))
+                    visited_edges.update({(v1, v2), (v2, v1)})
 
-                e_v = v_idxs[end_idx] # Find index of actual end vertex (i.e. flip segment based on direction)
+                e_v = v_idxs[1 if p_dir == 1 else 0] # Find index of actual end vertex (i.e. flip segment based on direction)
 
                 next_seg_idx = seg_idx + p_dir
                 if e_v > 1: # Is cross point?
                     encountered_c_idx = seg_to_cross[s][seg_idx][e_v - 2] # Find cross_idx of collided cross-point
                     processed_ways[encountered_c_idx][s].add(seg_idx) # Add to shape's list for the cross-point
                     break
-                elif next_seg_idx == -1 or next_seg_idx == len(segments[s]) or not seg_to_point(s, seg_idx, e_v) == seg_to_point(s, next_seg_idx, start_idx): #<- HERE ERROR
+                elif next_seg_idx == -1 or next_seg_idx == len(segments[s]) or not seg_to_point(s, seg_idx, e_v) == seg_to_point(s, next_seg_idx, 0 if p_dir == 1 else 1 ): #<- HERE ERROR
                     break # Break if no more segments, or if path formed by segments is not continuous
                 else:
                     seg_idx = next_seg_idx # Next segment

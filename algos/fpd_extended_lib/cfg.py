@@ -16,7 +16,7 @@ CHUNK_COMP_METHOD = CM.NONE # 'ZLIB', 'GZIP', 'NONE'
 D_BITSIZE_SIZE = 12 # Size used to store the size of the chunks OPTIMIZE
 POLY_RING_CNT_SIZE = required_bits(2048)
 RING_CHK_CNT_SIZE = 30
-MAX_NUM_DELTAS = 31  # Max number of deltas in a chunk before split
+MAX_NUM_DELTAS = 20  # Max number of deltas in a chunk before split
 D_CNT_SIZE = required_bits(MAX_NUM_DELTAS + 1)
 
 # Disable optimized FPDE operations
