@@ -290,11 +290,12 @@ def is_intersecting(bins, debug_correct_ans=None, plot_all=False):
 # Returns the possible paths (directed segment) from an intersection point. Also checks that it is within both shapes.
 #@profile
 def possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to_middle_point, bins, cache, processed_ways):
-    possible_paths = []
+    possible_paths, removed = [], False
     seg_idxs = cross_to_seg[c_i]
     for s in range(2): # Both shapes
         for seg_idx in seg_idxs[s]: # Enumerate the segments containing crosspoint with id c_i
             if seg_idx in processed_ways[c_i][s]: # Skip processed
+                removed=True
                 continue
             seg_cross_cnt = len(seg_to_cross[s][seg_idx])
             # Get possible successor points
@@ -338,8 +339,8 @@ def possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to
     # #Make sure points are within both shapes
     # print("")
     # DEBUG_print_paths(possible_paths)
-    return possible_paths
-@profile
+    return possible_paths, removed
+#@profile
 def intersection(bins, debug_correct_ans=None, plot_all=False):
     cache = [{},{}]
     bbox, overlap_type = common_bbox(bins)
@@ -405,8 +406,8 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
     visited_edges = set()
     while len(cross_left) > 0:
         c_i = cross_left.pop() # Take one cross-point
-        paths = possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to_middle_point, bins, cache, processed_ways)
-        if len(paths) == 0:
+        paths, removed = possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to_middle_point, bins, cache, processed_ways)
+        if len(paths) == 0 and not removed:
             res_points.append(intersecting_points[c_i])
         while len(paths) > 0:
             path = paths.pop() # Process one path
