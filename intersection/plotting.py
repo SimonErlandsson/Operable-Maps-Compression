@@ -31,7 +31,7 @@ def bounds_to_coords(bounds):
     return x_bounds, y_bounds
 
 
-def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True, alpha=1.0):
+def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True, alpha=1.0, fill_alpha=0.01):
     if SHOW_GEOMETRIES:
         geom_type = shapely.get_type_id(geom)
         rings = []
@@ -53,7 +53,7 @@ def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True, alpha=1.0):
 
         for ring_solid, ring_points in rings:
             if ring_solid and solid:
-                plt.fill(xs(ring_points), ys(ring_points), color=color(geom), alpha=(0.1 * alpha))
+                plt.fill(xs(ring_points), ys(ring_points), color=color(geom), alpha=fill_alpha)
             plt.plot(xs(ring_points), ys(ring_points), '-' if solid else '--', color=color(geom), alpha=alpha)
 
 
@@ -104,7 +104,7 @@ fpd = FpdExtended()
 
 
 def calculate_chunks_bounds(bin, include_next_chunk_start=True):
-    chunks, is_last_chunk_ring = fpd.get_chunks(bin)
+    chunks, is_last_chunk_ring = fpd.get_chunks(bin, include_next_chunk_start)
     _, type = fpd.type(bin)
     chunks_bounds = []
     chunks_vertices = []
@@ -123,7 +123,7 @@ def create_canvas(zoom=2.5):
     w, h = fig.get_size_inches()
     fig.set_size_inches(w * zoom, h * zoom)
 
-def plot_chunks_bounds(bin_in, include_next_chunk_start=False, avoid_create_frame=False, avoid_show=False, idxs=None, txt='', solid=True):
+def plot_chunks_bounds(bin_in, include_next_chunk_start=False, avoid_create_frame=False, avoid_show=False, idxs=None, txt='', solid=True, alpha=1.0, fill_alpha=0.02):
     if not avoid_create_frame:
         create_canvas()
 
@@ -139,13 +139,13 @@ def plot_chunks_bounds(bin_in, include_next_chunk_start=False, avoid_create_fram
         x_bounds, y_bounds = bounds_to_coords(chunk_bounds)
         chunk_color = (np.random.random(), np.random.random(), np.random.random())
         inverse_chunk_color = (1 - chunk_color[0], 1 - chunk_color[1], 1 - chunk_color[2])
-        plot_bounds(chunk_bounds, color=chunk_color, solid=solid)
-        plt.fill(x_bounds, y_bounds, color=chunk_color, alpha=0.02)
-        plt.scatter(xs, ys, s=10, color=inverse_chunk_color)
+        plot_bounds(chunk_bounds, color=chunk_color, solid=solid, alpha=alpha)
+        plt.fill(x_bounds, y_bounds, color=chunk_color, alpha=fill_alpha)
+        plt.scatter(xs, ys, s=20, zorder=30, color=inverse_chunk_color)
 
     _, geom = fpd.decompress(bin_in)
-    plot_geometry(geom, alpha=0.2)
+    #plot_geometry(geom, alpha=0.2)
 
-    plt.title(("Chunk Bounds" if not include_next_chunk_start else "Chunk Bounds - With Connecting Borders") + str(txt))
+    #plt.title(("Chunk Bounds" if not include_next_chunk_start else "Chunk Bounds - With Connecting Borders") + str(txt))
     if not avoid_show:
         plt.show()

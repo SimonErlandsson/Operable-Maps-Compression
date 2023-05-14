@@ -24,6 +24,8 @@ def read_dataset(DATASET_PATH = "data/lund_building_highway.json", NBR_ITER = -1
     with open(DATASET_PATH, 'r') as f:
         data = json.loads(f.read())
     file_df: pd.DataFrame = pd.json_normalize(data, record_path=['features'])
+    if NBR_ITER != -1:
+        file_df = file_df.head(NBR_ITER)
     # Create a dataframe suitable for the WKT format for easy convertion to shapely objects
     df = pd.DataFrame(
         {'type': file_df['geometry.type'], 'coordinates': file_df['geometry.coordinates']})
