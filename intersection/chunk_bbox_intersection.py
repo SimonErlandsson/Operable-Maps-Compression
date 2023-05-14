@@ -294,7 +294,7 @@ def possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to
     seg_idxs = cross_to_seg[c_i]
     for s in range(2): # Both shapes
         for seg_idx in seg_idxs[s]: # Enumerate the segments containing crosspoint with id c_i
-            if seg_idx in processed_ways[c_i][s]: # Skip processed
+            if seg_idx in processed_ways[s]: # Skip processed
                 removed=True
                 continue
             seg_cross_cnt = len(seg_to_cross[s][seg_idx])
@@ -340,7 +340,7 @@ def possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to
     # print("")
     # DEBUG_print_paths(possible_paths)
     return possible_paths, removed
-#@profile
+@profile
 def intersection(bins, debug_correct_ans=None, plot_all=False):
     cache = [{},{}]
     bbox, overlap_type = common_bbox(bins)
@@ -400,7 +400,7 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
     intersecting_points, segments, seg_to_cross, cross_to_seg, bounds = line_data
     #print("Intersecting Points:", intersecting_points)
     cross_left = set(range(len(intersecting_points))) # Ids of unprocessed intersection points
-    processed_ways = [[set(), set()] for _ in range(len(intersecting_points))] # Avoid processing visited segments
+    processed_ways = [set(), set()] # Avoid processing visited segments
     res_segs = deque() # Segments which are part of the resulting shape
     res_points = []
     visited_edges = set()
@@ -430,10 +430,10 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
 
                 next_seg_idx = seg_idx + p_dir
                 if e_v > 1: # Is cross point?
-                    encountered_c_idx = seg_to_cross[s][seg_idx][e_v - 2] # Find cross_idx of collided cross-point
-                    processed_ways[encountered_c_idx][s].add(seg_idx) # Add to shape's list for the cross-point
+                    #encountered_c_idx = seg_to_cross[s][seg_idx][e_v - 2] # Find cross_idx of collided cross-point
+                    processed_ways[s].add(seg_idx) # Add to shape's list for the cross-point
                     break
-                elif next_seg_idx == -1 or next_seg_idx == len(segments[s]) or not seg_to_point(s, seg_idx, e_v) == seg_to_point(s, next_seg_idx, 0 if p_dir == 1 else 1 ): #<- HERE ERROR
+                elif next_seg_idx == -1 or next_seg_idx == len(segments[s]) or not seg_to_point(s, seg_idx, e_v) == seg_to_point(s, next_seg_idx, 0 if p_dir == 1 else 1): #<- HERE ERROR
                     break # Break if no more segments, or if path formed by segments is not continuous
                 else:
                     seg_idx = next_seg_idx # Next segment
@@ -445,12 +445,8 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
                         v_idxs = [2 if seg_cross_cnt != 0 else 0, 1]
 
             # Append path-segment to total segments
-            # TODO: Fix ordering in resulting shape
-            if p_dir == 1:
-                res_segs += path_segs
-            else:
-                path_segs += res_segs
-                res_segs = path_segs 
+           
+            res_segs += path_segs 
 
 
     #Merge all segments into LineString or MultiLineString
