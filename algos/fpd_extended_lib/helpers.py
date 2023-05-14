@@ -135,7 +135,7 @@ def random_access(bin_in, idx, cache, offset_cache=None, get_chunk=False):
                 next_chk_offset = cfg.offset + FLOAT_SIZE * 2 + delta_bytes_size
             # Avoid reading if EOF
             if next_chk_offset + cfg.EOF_THRESHOLD <= cfg.binary_length:
-                next_vert, cache = access_vertex_chk(bin, next_chk_offset, delta_size, 0, cache)
+                next_vert = get_upcoming_vertex(bin, next_chk_offset)
                 chk.append(next_vert)
             cfg.offset = old_offset
             return chk, cache
@@ -153,7 +153,14 @@ def random_access(bin_in, idx, cache, offset_cache=None, get_chunk=False):
             rings_left -= 1
     raise Exception("Out of bounds!")
 
+def get_upcoming_vertex(bin, chk_offset):
+    cfg.offset = chk_offset + D_CNT_SIZE
+    if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
+        cfg.offset +=  D_BITSIZE_SIZE
+   
+    return (bytes_to_double(bin), bytes_to_double(bin))
 
+#@profile
 def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_vertices=False):
     """
     Can be used if the chunk location in bin is already known, and a vertex within the chunk is needed.
@@ -179,12 +186,17 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
     if cfg.COMPRESS_CHUNK:
         bin, _ = decompress_chunk(bin, cfg.offset, delta_bytes_size) 
 
-    # Loop through deltas in chunk
-    for idx in range(idx):
-        x = bytes_to_decoded_coord(bin, x, delta_size)
-        y = bytes_to_decoded_coord(bin, y, delta_size)
-        if list_vertices:
+    #Optimized for common case
+    if not cfg.USE_ENTROPY and list_vertices:
+        for idx in range(idx):
+            x, y = bytes_to_decoded_coord_pair(bin, (x, y), delta_size)
             vertices.append((x, y))
+    else:
+        for idx in range(idx):
+            x = bytes_to_decoded_coord(bin, x, delta_size)
+            y = bytes_to_decoded_coord(bin, y, delta_size)
+            if list_vertices:
+                vertices.append((x, y))
 
     cfg.offset = old_offset
     return ((x, y) if not list_vertices else vertices), cache
