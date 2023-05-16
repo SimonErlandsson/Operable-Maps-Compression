@@ -424,6 +424,18 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
                 #Add front and back edges to visited edges set
                 if (v1, v2) not in visited_edges and (v2, v1) not in visited_edges:
                     path_append([v1, v2]) # Add segment to resulting shape a
+
+                    create_canvas(zoom=0.8, no_frame=True)
+                    #plot_intersecting_points()
+                    for p1, p2 in res_segs:
+                        plot_intersecting_points([p1, p2])
+                        plot_line(p1, p2, color='red')
+                    for p1, p2 in path_segs:
+                        plot_intersecting_points([p1, p2])
+                        plot_line(p1, p2, color='green')
+                    plot_geometry(fpd.decompress(bins[0])[1], solid=False, alpha=0.1)
+                    plot_geometry(fpd.decompress(bins[1])[1], solid=False, alpha=0.1)
+
                     visited_edges.update({(v1, v2), (v2, v1)})
 
                 e_v = v_idxs[1 if p_dir == 1 else 0] # Find index of actual end vertex (i.e. flip segment based on direction)
@@ -445,7 +457,6 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
                         v_idxs = [seg_cross_cnt + 1 if seg_cross_cnt != 0 else 0, 1]
 
             # Append path-segment to total segments
-           
             res_segs += path_segs 
 
 

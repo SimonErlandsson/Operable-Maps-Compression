@@ -122,10 +122,13 @@ def calculate_chunks_bounds(bin, include_next_chunk_start=True):
         chunks_vertices.append((xs, ys))
     return chunks_bounds, chunks_vertices
 
-def create_canvas(zoom=2.5):
+def create_canvas(zoom=2.5, no_frame=False):
     fig = plt.figure()
     w, h = fig.get_size_inches()
     fig.set_size_inches(w * zoom, h * zoom)
+    if no_frame:
+        plt.axis('off')
+        plt.margins(0.01)
 
 def plot_chunks_bounds(bin_in, include_next_chunk_start=False, avoid_create_frame=False, avoid_show=False, idxs=None, txt='', solid=True, alpha=1.0, fill_alpha=0.02):
     if not avoid_create_frame:
