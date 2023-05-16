@@ -30,6 +30,11 @@ def bounds_to_coords(bounds):
     y_bounds = [y_t, y_t, y_b, y_b, y_t]
     return x_bounds, y_bounds
 
+def append_polygon(shp, rings):
+    exterior_coords = list(shp.exterior.coords)
+    interior_coords = [list(interior.coords) for interior in shp.interiors]
+    rings += [(True, ring) for ring in ([exterior_coords] + interior_coords)]
+
 
 def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True, alpha=1.0, fill_alpha=0.01):
     if SHOW_GEOMETRIES:
@@ -45,12 +50,11 @@ def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True, alpha=1.0, fill_alpha=
                 if shp_type == GT.LINESTRING or shp_type == GT.POINT or shp_type == GT.MULTILINESTRING or shp_type == GT.MULTIPOINT:
                     pts = shapely.get_coordinates(geom)
                     rings += [(False, pts)]
-                
-                else:
-                    exterior_coords = list(shp.exterior.coords)
-                    interior_coords = [list(interior.coords) for interior in shp.interiors]
-                    rings += [(True, ring) for ring in ([exterior_coords] + interior_coords)]
-
+                elif shp_type == GT.POLYGON:
+                    append_polygon(shp, rings)
+                elif shp_type == GT.MULTIPOLYGON:
+                    for s in shp.geoms: # Go through polygons in multipoly
+                        append_polygon(s, rings)
         for ring_solid, ring_points in rings:
             if ring_solid and solid:
                 plt.fill(xs(ring_points), ys(ring_points), color=color(geom), alpha=fill_alpha)

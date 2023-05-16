@@ -340,7 +340,7 @@ def possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to
     # print("")
     # DEBUG_print_paths(possible_paths)
     return possible_paths, removed
-@profile
+#@profile
 def intersection(bins, debug_correct_ans=None, plot_all=False):
     cache = [{},{}]
     bbox, overlap_type = common_bbox(bins)
@@ -442,7 +442,7 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
                     if p_dir == 1:
                         v_idxs = [0, 2 if seg_cross_cnt != 0 else 1] # Has next line-segment crosspoint? If so take the first cross point as segment end-point.
                     else:
-                        v_idxs = [2 if seg_cross_cnt != 0 else 0, 1]
+                        v_idxs = [seg_cross_cnt + 1 if seg_cross_cnt != 0 else 0, 1]
 
             # Append path-segment to total segments
            

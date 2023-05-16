@@ -156,7 +156,7 @@ def random_access(bin_in, idx, cache, offset_cache=None, get_chunk=False):
 def get_upcoming_vertex(bin, chk_offset):
     cfg.offset = chk_offset + D_CNT_SIZE
     if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
-        cfg.offset +=  D_BITSIZE_SIZE
+        cfg.offset += D_BITSIZE_SIZE
    
     return (bytes_to_double(bin), bytes_to_double(bin))
 

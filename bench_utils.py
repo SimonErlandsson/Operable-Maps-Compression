@@ -8,6 +8,9 @@ import tqdm
 import json
 
 def load_shp_files(base_loc):
+    """
+        Can be used to read multiple .shp-files into df.
+    """
     df = gpd.GeoDataFrame()
     files = glob.glob(base_loc + '/*.shp')
     for i in tqdm.tqdm(range(len(files))):
@@ -19,11 +22,21 @@ def load_shp_files(base_loc):
     return df, list(range(len(df)))
 
 def read_dataset(DATASET_PATH = "data/lund_building_highway.json", NBR_ITER = -1):
+    """
+        Path to dataset is either .json file or .shp file.
+        Avoid loading large .shp files here. Instead use 'load_shp_files'.
+    """
     #DATASET_PATH = "data/world.json"
     # Extract the nested feature attribute of the geo_json file containing the geometries
-    with open(DATASET_PATH, 'r') as f:
-        data = json.loads(f.read())
-    file_df: pd.DataFrame = pd.json_normalize(data, record_path=['features'])
+    if DATASET_PATH.endswith(".shp"):
+        file_df = gpd.read_file(DATASET_PATH) # Parse .shp to GeoJson format
+        geo = gpd.GeoSeries(file_df.geometry)
+        geo_json = geo.to_json()
+        file_df: pd.DataFrame = pd.json_normalize(json.loads(geo_json), record_path=['features'])
+    else:
+        with open(DATASET_PATH, 'r') as f:
+            data = json.loads(f.read())
+        file_df: pd.DataFrame = pd.json_normalize(data, record_path=['features'])
     if NBR_ITER != -1:
         file_df = file_df.head(NBR_ITER)
     # Create a dataframe suitable for the WKT format for easy convertion to shapely objects
@@ -49,13 +62,12 @@ def parse_intersection_data(file_name, max_shps=999999999, strip_precision=False
             p2 = shapely.from_wkt(data[i + 2])
             if strip_precision:
                 p1 = shapely.from_wkt(shapely.to_wkt(p1, rounding_precision=7))
-                p2 = shapely.from_wkt(shapely.to_wkt(p1, rounding_precision=7))
+                p2 = shapely.from_wkt(shapely.to_wkt(p2, rounding_precision=7))
             intersects = data[i + 3]
             geom_pairs.append((p1, p2))
             geom_stats.append((type, intersects))
     else:
         file = open(f'data/intersection/{file_name}', 'r')
-
         lines = file.read().splitlines()
         for i in range(0, min(len(lines), max_shps), 3): # Don't include a new line in end of file
             p1 = shapely.from_wkt(lines[i])
