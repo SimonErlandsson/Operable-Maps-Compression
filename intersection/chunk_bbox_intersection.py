@@ -148,17 +148,9 @@ def is_contained_within(containee, container, container_bounds, debug_correct_an
     return len(intersecting_points) % 2 == 1
 
 ##@profile
-def is_point_on_segment(x1, y1, x2, y2 , x, y):
-    """Checks if a point is on a segment"""
-
-    # Check if the point is collinear with the segment
-    if abs((y - y1) * (x2 - x1) - (x - x1) * (y2 - y1)) > POINT_ERR_TOL:
-        return False
-
-    dot = (x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)
-
-    #POINT_ERR_TOL for robustness in internal approximation errors
-    return not(dot < -POINT_ERR_TOL or dot > (x2 - x1) ** 2 + (y2 - y1) ** 2 + POINT_ERR_TOL)
+def is_point_on_segment(seg, pt):
+    seg_pt_1, seg_pt_2, pt = (np.array(seg[0]), np.array(seg[1]), np.array(pt))
+    return abs(np.linalg.norm(seg_pt_1 - pt) + np.linalg.norm(seg_pt_2 - pt) - np.linalg.norm(seg_pt_1 - seg_pt_2)) < 1e-15
 
    
 
@@ -238,7 +230,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
                         for seg in chk_segs: #Go through each of those segments   
                             seg_idx = seg_idxs[s][seg] #Get the correct segment index !O(n)!
                             if not seg_idx in cross_to_seg[p_idx][s]:
-                                if is_point_on_segment(seg[0][0], seg[0][1], seg[1][0], seg[1][1], p[0], p[1]):
+                                if is_point_on_segment(seg, p):
                                 #Checking if a segment intersect with intersection point or line
                                     seg_to_cross[s][seg_idx].append(p_idx)
                                     cross_to_seg[p_idx][s].append(seg_idx)
@@ -294,9 +286,9 @@ def possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to
     seg_idxs = cross_to_seg[c_i]
     for s in range(2): # Both shapes
         for seg_idx in seg_idxs[s]: # Enumerate the segments containing crosspoint with id c_i
-            if seg_idx in processed_ways[s]: # Skip processed
-                removed=True
-                continue
+            # if seg_idx in processed_ways[s]: # Skip processed
+            #     removed=True
+            #     continue
             seg_cross_cnt = len(seg_to_cross[s][seg_idx])
             # Get possible successor points
             # Where is the current cross?
@@ -425,18 +417,20 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
                 if (v1, v2) not in visited_edges and (v2, v1) not in visited_edges:
                     path_append([v1, v2]) # Add segment to resulting shape a
 
-                    create_canvas(zoom=0.8, no_frame=True)
-                    #plot_intersecting_points()
-                    for p1, p2 in res_segs:
-                        plot_intersecting_points([p1, p2])
-                        plot_line(p1, p2, color='red')
-                    for p1, p2 in path_segs:
-                        plot_intersecting_points([p1, p2])
-                        plot_line(p1, p2, color='green')
-                    plot_geometry(fpd.decompress(bins[0])[1], solid=False, alpha=0.1)
-                    plot_geometry(fpd.decompress(bins[1])[1], solid=False, alpha=0.1)
+                    # create_canvas(zoom=0.8, no_frame=True)
+                    # #plot_intersecting_points()
+                    # for p1, p2 in res_segs:
+                    #     plot_intersecting_points([p1, p2])
+                    #     plot_line(p1, p2, color='red')
+                    # for p1, p2 in path_segs:
+                    #     plot_intersecting_points([p1, p2])
+                    #     plot_line(p1, p2, color='green')
+                    # plot_geometry(fpd.decompress(bins[0])[1], solid=False, alpha=0.1)
+                    # plot_geometry(fpd.decompress(bins[1])[1], solid=False, alpha=0.1)
 
                     visited_edges.update({(v1, v2), (v2, v1)})
+                else:
+                    break
 
                 e_v = v_idxs[1 if p_dir == 1 else 0] # Find index of actual end vertex (i.e. flip segment based on direction)
 
