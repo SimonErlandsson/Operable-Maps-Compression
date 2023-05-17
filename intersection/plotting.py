@@ -36,7 +36,9 @@ def append_polygon(shp, rings):
     rings += [(True, ring) for ring in ([exterior_coords] + interior_coords)]
 
 
-def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True, alpha=1.0, fill_alpha=0.01):
+def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True, alpha=1.0, fill_alpha=0.01, hatch=None):
+    hatch = '/' if hatch == True else hatch
+
     if SHOW_GEOMETRIES:
         geom_type = shapely.get_type_id(geom)
         rings = []
@@ -57,7 +59,7 @@ def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True, alpha=1.0, fill_alpha=
                         append_polygon(s, rings)
         for ring_solid, ring_points in rings:
             if ring_solid and solid:
-                plt.fill(xs(ring_points), ys(ring_points), color=color(geom), alpha=fill_alpha)
+                plt.fill(xs(ring_points), ys(ring_points), color=color(geom), alpha=fill_alpha, hatch=hatch)
             plt.plot(xs(ring_points), ys(ring_points), '-' if solid else '--', color=color(geom), alpha=alpha)
 
 
@@ -79,10 +81,10 @@ def plot_common_bbox(geometries, SHOW_COMMON_BOUNDING_BOX=True):
         plot_geometry_bbox(bbox_shape, solid=True)
 
 
-def plot_coordinates(geom, SHOW_COORDINATES=True):
+def plot_coordinates(geom, SHOW_COORDINATES=True, size=13):
     ps = shapely.get_coordinates(geom)
     if SHOW_COORDINATES:
-        plt.scatter(xs(ps), ys(ps), 13, zorder=10, color=inv_color(geom))
+        plt.scatter(xs(ps), ys(ps), size, zorder=10, color=inv_color(geom))
 
 
 def plot_intersecting_points(pts, SHOW_INTERSECTING_POINTS=True):
