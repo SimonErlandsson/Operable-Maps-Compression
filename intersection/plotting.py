@@ -7,13 +7,13 @@ random.seed(13)
 
 def xs(pts): return [p[0] for p in pts]
 def ys(pts): return [p[1] for p in pts]
-def inv_color(shp): return (1 - color(shp)[0], 1 - color(shp)[1], 1 - color(shp)[2])
+def inv_color(shp): return (1 - geom_color(shp)[0], 1 - geom_color(shp)[1], 1 - geom_color(shp)[2])
 
 
 colors = {}
 
 
-def color(shp):
+def geom_color(shp):
     wkt = shapely.to_wkt(shp)
     if wkt not in colors.keys():
         colors[wkt] = [random.random() for _ in range(3)]
@@ -36,7 +36,8 @@ def append_polygon(shp, rings):
     rings += [(True, ring) for ring in ([exterior_coords] + interior_coords)]
 
 
-def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True, alpha=1.0, fill_alpha=0.01, hatch=None):
+def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True, alpha=1.0, fill_alpha=0.01, hatch=None, fill=True, color=None):
+    color = geom_color(geom) if color == None else color
     hatch = '/' if hatch == True else hatch
 
     if SHOW_GEOMETRIES:
@@ -58,15 +59,15 @@ def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True, alpha=1.0, fill_alpha=
                     for s in shp.geoms: # Go through polygons in multipoly
                         append_polygon(s, rings)
         for ring_solid, ring_points in rings:
-            if ring_solid and solid:
-                plt.fill(xs(ring_points), ys(ring_points), color=color(geom), alpha=fill_alpha, hatch=hatch)
-            plt.plot(xs(ring_points), ys(ring_points), '-' if solid else '--', color=color(geom), alpha=alpha)
+            if ring_solid and fill:
+                plt.fill(xs(ring_points), ys(ring_points), color=color, alpha=fill_alpha, hatch=hatch)
+            plt.plot(xs(ring_points), ys(ring_points), '-' if solid else '--', color=color, alpha=alpha)
 
 
 def plot_geometry_bbox(geom, SHOW_BOUNDING_BOXES=True, solid=False):
     bbox = bbox_coords(geom)
     if SHOW_BOUNDING_BOXES:
-        plt.plot(xs(bbox), ys(bbox), '-' if solid else '--', color=color(geom), zorder=-10)
+        plt.plot(xs(bbox), ys(bbox), '-' if solid else '--', color=geom_color(geom), zorder=-10)
 
 def plot_bounds(bounds, solid=False, color=None, zorder=20, alpha=1.0):
     if color == None:
@@ -87,9 +88,9 @@ def plot_coordinates(geom, SHOW_COORDINATES=True, size=13):
         plt.scatter(xs(ps), ys(ps), size, zorder=10, color=inv_color(geom))
 
 
-def plot_intersecting_points(pts, SHOW_INTERSECTING_POINTS=True):
+def plot_intersecting_points(pts, SHOW_INTERSECTING_POINTS=True, color='black', zorder=10, size=22):
     if SHOW_INTERSECTING_POINTS:
-        plt.scatter(xs(pts), ys(pts), 22, zorder=10)
+        plt.scatter(xs(pts), ys(pts), size, zorder=zorder, color=color)
 
 def plot_raw_points(pts, color='blue', size=22, alpha=1.0):
     plt.scatter(xs(pts), ys(pts), size, color=color, zorder=20, alpha=alpha)
@@ -132,7 +133,7 @@ def create_canvas(zoom=2.5, no_frame=False):
         plt.axis('off')
         plt.margins(0.01)
 
-def plot_chunks_bounds(bin_in, include_next_chunk_start=False, avoid_create_frame=False, avoid_show=False, idxs=None, txt='', solid=True, alpha=1.0, fill_alpha=0.02):
+def plot_chunks_bounds(bin_in, include_next_chunk_start=False, avoid_create_frame=False, avoid_show=False, idxs=None, txt='', solid=True, alpha=1.0, fill_alpha=0.02, color=None, point_color=None, point_size=20):
     if not avoid_create_frame:
         create_canvas()
 
@@ -146,11 +147,12 @@ def plot_chunks_bounds(bin_in, include_next_chunk_start=False, avoid_create_fram
         chunk_bounds, chunk_vertices = chunk_data
         xs, ys = chunk_vertices
         x_bounds, y_bounds = bounds_to_coords(chunk_bounds)
-        chunk_color = (np.random.random(), np.random.random(), np.random.random())
-        inverse_chunk_color = (1 - chunk_color[0], 1 - chunk_color[1], 1 - chunk_color[2])
+        chunk_color = (np.random.random(), np.random.random(), np.random.random()) if color == None else color
+        point_color = chunk_color if point_color == None else point_color
+        point_color = (1 - chunk_color[0], 1 - chunk_color[1], 1 - chunk_color[2]) if point_color == None else point_color
         plot_bounds(chunk_bounds, color=chunk_color, solid=solid, alpha=alpha)
         plt.fill(x_bounds, y_bounds, color=chunk_color, alpha=fill_alpha)
-        plt.scatter(xs, ys, s=20, zorder=30, color=inverse_chunk_color)
+        plt.scatter(xs, ys, s=point_size, zorder=30, color=point_color)
 
     _, geom = fpd.decompress(bin_in)
     #plot_geometry(geom, alpha=0.2)

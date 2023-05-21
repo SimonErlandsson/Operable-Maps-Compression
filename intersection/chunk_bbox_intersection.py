@@ -135,14 +135,20 @@ def is_contained_within(containee, container, container_bounds, debug_correct_an
     # DEBUG
     # if plot_all or debug_correct_ans != None and debug_correct_ans != (len(intersecting_points) % 2 == 1):
     #     print(fpd.type(container)[1], fpd.type(containee)[1])
-    #     plot_chunks_bounds(container, include_next_chunk_start=True, avoid_show=True)
-    #     plot_chunks_bounds(containee, include_next_chunk_start=True, avoid_create_frame=True)
-    #     plot_chunks_bounds(container, include_next_chunk_start=True, avoid_show=True, idxs=chks)
-    #     for cs in segments:
-    #         plot_geometry(cs)
+    #     create_canvas(no_frame=True, zoom=1.5)
+    #     chunks_not_loaded = list(filter(lambda x: x not in chks, list(range(len(container_bounds.items())))))
+    #     plot_chunks_bounds(container, include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chunks_not_loaded, solid=False, alpha=0.3, fill_alpha=0.05, color='black', point_color='cyan', point_size=9)
+    #     plot_chunks_bounds(containee, include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, alpha=1, color='orange', point_color='lime', point_size=14)
+    #     plot_chunks_bounds(container, include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chks, alpha=1, color='orange', point_color='red', point_size=12)
+    #     ## for cs in segments:
+    #     ##     plot_geometry(cs)
+    #     plot_geometry(fpd.decompress(containee)[1], fill_alpha=0.1, hatch='\\', color='blue')
+    #     plot_geometry(fpd.decompress(container)[1], fill_alpha=0.1, hatch='/', color='green')
+    #     plot_geometry(fpd.decompress(containee)[1], fill_alpha=0.3, hatch='X', color='purple')
     #     plot_geometry(ray, solid=False)
-    #     plot_intersecting_points(intersecting_points)
-    #     plot_chunks_bounds(containee, include_next_chunk_start=False, avoid_create_frame=True, idxs=[], txt=f" : was {len(intersecting_points) % 2 == 1} expected {debug_correct_ans}")
+    #     plot_intersecting_points(intersecting_points, color='orange', size=25)
+    #     plt.show()
+        ##plot_chunks_bounds(containee, include_next_chunk_start=False, avoid_create_frame=True, idxs=[], txt=f" : was {len(intersecting_points) % 2 == 1} expected {debug_correct_ans}")
     # END DEBUG
 
     return len(intersecting_points) % 2 == 1
@@ -191,7 +197,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
         chks[i] = list(chk_coords[i].values()) # Get chunk coords
         polylines[i] = list(chk_polylines[i].values()) # Transform each chunk to polyline
         
-        #Avoid declaring unusefull variables if predicate intersection
+        #Avoid declaring unused variables if predicate intersection
         if res_list != None:
             chk_segments[i] = {c_i: [(coords[i], coords[i+1]) for i in range(len(coords) - 1)] for c_i, coords in chk_coords[i].items()} # Get chunk -> segments data
             segments[i] = list(itertools.chain(*chk_segments[i].values())) #Get segment data for geometry in total
@@ -242,6 +248,19 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
             for s in range(2):
                 for seg_idx in seg_to_cross[s]:    
                     seg_to_cross[s][seg_idx].sort(key=lambda x: math.dist(segments[s][seg_idx][0],intersecting_points[x])) # Sort ordered by distance from p[0]
+
+    # create_canvas(no_frame=True, zoom=1.5)
+    # for s in range(2):
+    #     chunks_not_loaded = list(filter(lambda x: x not in chk_idxs[s], list(range(len(bounds[s])))))
+    #     plot_chunks_bounds(bins[s], include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chunks_not_loaded, solid=False, alpha=0.3, fill_alpha=0.05, color='black', point_color='cyan', point_size=9)
+    #     plot_chunks_bounds(bins[s], include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chk_idxs[s], alpha=1.0, color='orange', point_color='red', point_size=14)
+    #     plot_geometry(fpd.decompress(bins[s])[1], fill_alpha=0.1, hatch=('\\' if s == 0 else '/'), color=('blue' if s == 0 else 'green'))
+    # from shapely import intersection as s_inter
+    # inter_shape = s_inter(fpd.decompress(bins[0])[1], fpd.decompress(bins[1])[1])
+    # plot_geometry(inter_shape, fill_alpha=0.3, hatch='X', color='purple')
+    # plot_intersecting_points(get_coordinates(inter_shape), color='lime', zorder=100, size=14)
+    # plt.show()
+
 
     if len(intersecting_points) == 0:
         return False, bounds 
