@@ -469,9 +469,35 @@ def intersection(bins, debug_correct_ans=None, plot_all=False):
                     else:
                         v_idxs = [seg_cross_cnt + 1 if seg_cross_cnt != 0 else 0, 1]
 
+            # if len(path_segs) > 0:
+            #     pt_size = 38
+            #     create_canvas(zoom=0.8, no_frame=True)
+            #     plot_geometry(fpd.decompress(bins[0])[1], solid=False, alpha=0.3, fill_alpha=0.1, hatch='/')
+            #     plot_geometry(fpd.decompress(bins[1])[1], solid=False, alpha=0.3, fill_alpha=0.1, hatch='\\')
+            #     for p1, p2 in res_segs:
+            #         plot_intersecting_points([p1, p2], color='red', size=pt_size)
+            #         plot_line(p1, p2, color='red', zorder=10)
+            #     for idx, pts in enumerate(path_segs):
+            #         p1, p2 = pts
+                    
+            #         col = (0, ((idx + 1) / len(path_segs) * 0.5 + 0.5), 0)
+            #         plot_intersecting_points([p1, p2], color=col, size=pt_size)
+            #         plot_line(p1, p2, color=col, zorder=10)
+            #     plot_intersecting_points([intersecting_points[c_i]], color='black', size=pt_size)
+            #     plt.savefig("animate/" + str(intersecting_points[0][0]) + " " + str(len(res_segs)) + ".png", bbox_inches='tight')
+            #     plt.show()
             # Append path-segment to total segments
             res_segs += path_segs 
 
+    # create_canvas(zoom=0.8, no_frame=True)
+    # plot_geometry(fpd.decompress(bins[0])[1], solid=False, alpha=0.3, fill_alpha=0.1, hatch='/')
+    # plot_geometry(fpd.decompress(bins[1])[1], solid=False, alpha=0.3, fill_alpha=0.1, hatch='\\')
+    # for p1, p2 in res_segs:
+    #     plot_intersecting_points([p1, p2], color='red', size=pt_size)
+    #     plot_line(p1, p2, color='red', zorder=10)
+    # plot_intersecting_points(intersecting_points, color='black', size=pt_size)
+    # plt.savefig("animate/" + str(intersecting_points[0][0]) + " " + str(len(res_segs)) + ".png", bbox_inches='tight')
+    # plt.show()
 
     #Merge all segments into LineString or MultiLineString
     unfilt_line_strs = ops.linemerge(res_segs)
