@@ -61,10 +61,10 @@ def bytes_to_decoded_coord(bin, prev_coord, input_size=64):
 
 def bytes_to_decoded_coord_pair(bin, prev_coord, input_size=64):
   
-    d1 = long_as_double(zz_decode(ba2int_optimized(bin[cfg.offset: cfg.offset + input_size])) + double_as_long(prev_coord[0]))
-    d2 = long_as_double(zz_decode(ba2int_optimized(bin[cfg.offset + input_size: cfg.offset + input_size * 2])) + double_as_long(prev_coord[1]))
+    d1 = zz_decode(ba2int_optimized(bin[cfg.offset: cfg.offset + input_size])) + prev_coord[0]
+    d2 = zz_decode(ba2int_optimized(bin[cfg.offset + input_size: cfg.offset + input_size * 2])) + prev_coord[1]
     cfg.offset += input_size * 2
-    return d1, d2
+    return long_as_double(d1), long_as_double(d2), (d1, d2)
 
 def bytes_to_double(bin):
     bin = bin[cfg.offset:cfg.offset + FLOAT_SIZE]

@@ -188,8 +188,9 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
 
     #Optimized for common case
     if not cfg.USE_ENTROPY and list_vertices:
+        prev = double_as_long(x), double_as_long(y)
         for idx in range(idx):
-            x, y = bytes_to_decoded_coord_pair(bin, (x, y), delta_size)
+            x, y, prev = bytes_to_decoded_coord_pair(bin, prev, delta_size)
             vertices.append((x, y))
     else:
         for idx in range(idx):

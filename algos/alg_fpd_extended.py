@@ -72,8 +72,9 @@ def main():
     # binary_intersection = intersection.first_bin_search.binary_intersection
     # chunk_bbox_is_intersecting = intersection.chunk_bbox_intersection.is_intersecting
     chunk_bbox_intersection = intersection.chunk_bbox_intersection.intersection
-    lund_data, lund_data_stats = parse_intersection_data("lund.json", 100)
+    lund_data, lund_data_stats = parse_intersection_data("lund.json", 10000)
     world_data, world_data_stats = parse_intersection_data("world.json", 10)
+    special_cases, _ = parse_intersection_data("latest_export.json", strip_precision=True)
 
 
     from algos.alg_fpd_extended import FpdExtended
@@ -86,16 +87,50 @@ def main():
         _, b1 = fpd.compress(g1)
         _, b2 = fpd.compress(g2)
         exp_shape = shapely.intersection(g1, g2)
-        real_shape = fpd.intersection((b1, b2))
-
+        stats, real_shape = chunk_bbox_intersection((b1, b2),get_stats=True)
         total += 1
-        if exp_shape.equals(real_shape[1]):
+        if exp_shape.equals(real_shape):
             passed += 1
 
         # if total % 100 == 0:
         #     print(f"Passed {passed} of {total}. Total in set: {len(data)}")
-    print(total, passed)
+    print("World: ", total, passed)
 
+    # total = 0
+    # passed = 0
+    # for g1, g2 in lund_data:
+    #     #is_intersecting, intersect_points = binary_intersection(g1, g2)
+
+    #     _, b1 = fpd.compress(g1)
+    #     _, b2 = fpd.compress(g2)
+    #     exp_shape = shapely.intersection(g1, g2)
+    #     real_shape = fpd.intersection((b1, b2))
+
+    #     total += 1
+    #     if exp_shape.equals(real_shape[1]):
+    #         passed += 1
+
+    #     # if total % 100 == 0:
+    #     #     print(f"Passed {passed} of {total}. Total in set: {len(data)}")
+    # print("Lund: ", total, passed)
+
+    # total = 0
+    # passed = 0
+    # for g1, g2 in special_cases:
+    #     #is_intersecting, intersect_points = binary_intersection(g1, g2)
+
+    #     _, b1 = fpd.compress(g1)
+    #     _, b2 = fpd.compress(g2)
+    #     exp_shape = shapely.intersection(g1, g2)
+    #     real_shape = fpd.intersection((b1, b2))
+
+    #     total += 1
+    #     if exp_shape.equals(real_shape[1]):
+    #         passed += 1
+
+    #     # if total % 100 == 0:
+    #     #     print(f"Passed {passed} of {total}. Total in set: {len(data)}")
+    # print("Special_cases: ", total, passed)
 
 
 if __name__ == "__main__":
