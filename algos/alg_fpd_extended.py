@@ -34,7 +34,7 @@ class FpdExtended(CompressionAlgorithm):
     # ---- HELPER METHODS
 
     # Export some helper functions
-    get_chunks = lambda self, bin, include_ring_start=True: get_chunks(bin, include_ring_start)
+    get_chunks = lambda self, bin, include_ring_start=True, verbose=False: get_chunks(bin, include_ring_start, verbose)
     access_vertex_chk = lambda self, bin, chk_offset, delta_size, idx, cache=None: access_vertex_chk(bin, chk_offset, delta_size, idx, cache=cache)
     access_vertex = lambda self, bin, access_idx, cache=[]: access_vertex(bin, access_idx, cache)
     get_chunk = lambda self, bin, access_idx, offset_cache=None, cache=[]: access_chunk(bin, access_idx, offset_cache=offset_cache, cache=cache)

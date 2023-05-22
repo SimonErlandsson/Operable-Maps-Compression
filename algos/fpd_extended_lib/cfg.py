@@ -5,7 +5,7 @@ CM = Enum('CM', ['ZLIB', 'GZIP', 'ARITHMETIC', 'NONE'])
 required_bits = lambda x: int(np.ceil(np.log2(x + 2)))
 
 # If true: use "normal" FPD, else use "32-bit integer reprs.".
-USE_DEFAULT_DOUBLE = True
+USE_DEFAULT_DOUBLE = False
 
 # Enable per delta entropy compression
 ENTROPY_METHOD = EM.NONE # 'HUFFMAN', 'GOLOMB', 'AUTO', 'NONE'.
@@ -36,7 +36,7 @@ USE_ENTROPY = ENTROPY_METHOD != EM.NONE
 COMPRESS_CHUNK = CHUNK_COMP_METHOD != CM.NONE
 
 
-# Use "custom float size": TODO: Seems broken now
+# Use "custom float size":
 EXPONENT = 6 # Always defined, but not used if below are commented out
 # FLOAT_SIZE = 40  #Has to be multiple of 8
 # USE_FPINT = False
