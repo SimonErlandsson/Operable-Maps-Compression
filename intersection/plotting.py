@@ -98,9 +98,9 @@ def plot_raw_points(pts, color='blue', size=22, alpha=1.0):
 def plot_raw_point(pt, color='blue', size=22, alpha=1.0):
     plt.scatter(pt[0], pt[1], size, color=color, zorder=20, alpha=alpha)
 
-def plot_line(pt_1, pt_2, color='blue', solid=True, alpha=1.0):
+def plot_line(pt_1, pt_2, color='blue', solid=True, alpha=1.0, zorder=0):
     coords = [pt_1, pt_2]
-    plt.plot(xs(coords), ys(coords), '-' if solid else '--', color=color, alpha=alpha)
+    plt.plot(xs(coords), ys(coords), '-' if solid else '--', color=color, alpha=alpha, zorder=zorder)
 
 
 # FPDE related stuff
