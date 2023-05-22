@@ -227,7 +227,8 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
         chk_idxs = chk_idxs_filtered    
     
     #Get how many chunks we are unfoldning data
-    stats_collector[1] = len(chk_idxs[0]) + len(chk_idxs[1])
+    if stats_collector != None:
+        stats_collector[1] = len(chk_idxs[0]) + len(chk_idxs[1])
     
 
     
