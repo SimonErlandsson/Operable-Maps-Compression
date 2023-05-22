@@ -39,7 +39,7 @@ def get_chunks(bin_in, include_next_start=True):
             chunks_in_ring_left = bytes_to_uint(bin, RING_CHK_CNT_SIZE)
             chunks_in_ring = chunks_in_ring_left
 
-        deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
+        deltas_in_chunk = bytes_to_uint(bin, cfg.D_CNT_SIZE)
 
         # Extract reset point
         x = bytes_to_double(bin)
@@ -115,7 +115,7 @@ def random_access(bin_in, idx, cache, offset_cache=None, get_chunk=False):
             chunks_in_ring_left = bytes_to_uint(bin, RING_CHK_CNT_SIZE)
             ring_start_offset = cfg.offset
         deltas_in_chunk_offset = cfg.offset
-        deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
+        deltas_in_chunk = bytes_to_uint(bin, cfg.D_CNT_SIZE)
 
 
         delta_bytes_size = deltas_in_chunk * delta_size * 2
@@ -154,7 +154,7 @@ def random_access(bin_in, idx, cache, offset_cache=None, get_chunk=False):
     raise Exception("Out of bounds!")
 
 def get_upcoming_vertex(bin, chk_offset):
-    cfg.offset = chk_offset + D_CNT_SIZE
+    cfg.offset = chk_offset + cfg.D_CNT_SIZE
     if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
         cfg.offset += D_BITSIZE_SIZE
    
@@ -171,7 +171,7 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
     """
     old_offset = cfg.offset
     cfg.offset = chk_offset
-    deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
+    deltas_in_chunk = bytes_to_uint(bin, cfg.D_CNT_SIZE)
     if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
         delta_bytes_size = deltas_in_chunk * delta_size * 2 - bytes_to_int(bin, D_BITSIZE_SIZE)
     

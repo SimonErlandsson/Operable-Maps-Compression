@@ -100,14 +100,14 @@ def fp_delta_encoding(geometry, d_size, deltas):
         prev_x, prev_y = (x, y)
 
         # ---- CREATE NEW CHUNK? If 'first chunk', 'delta doesn't fit', 'new ring', or 'reached max deltas'
-        if chk_hdr_offset == 0 or not deltas_fit_in_bits(d_x_zig, d_y_zig, d_size) or rem_points_ring == 0 or chk_dt_cnt == MAX_NUM_DELTAS:
+        if chk_hdr_offset == 0 or not deltas_fit_in_bits(d_x_zig, d_y_zig, d_size) or rem_points_ring == 0 or chk_dt_cnt == cfg.MAX_NUM_DELTAS:
             # If not 'first chunk' -> save previous chunk's size
             if chk_hdr_offset != 0:
-                bits[chk_hdr_offset:chk_hdr_offset + D_CNT_SIZE] = uint_to_ba(chk_dt_cnt, D_CNT_SIZE)
+                bits[chk_hdr_offset:chk_hdr_offset + cfg.D_CNT_SIZE] = uint_to_ba(chk_dt_cnt, cfg.D_CNT_SIZE)
                 if cfg.COMPRESS_CHUNK: # Compress previous chunk
                     bits, chk_dt_bitsize = compress_chunk(bits, chk_hdr_offset, chk_dt_bitsize)
                 if STORE_DT_BITSIZE:
-                    bits[chk_hdr_offset + D_CNT_SIZE:chk_hdr_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = int_to_ba(chk_dt_cnt * d_size * 2 - chk_dt_bitsize, D_BITSIZE_SIZE)
+                    bits[chk_hdr_offset + cfg.D_CNT_SIZE:chk_hdr_offset + cfg.D_CNT_SIZE + D_BITSIZE_SIZE] = int_to_ba(chk_dt_cnt * d_size * 2 - chk_dt_bitsize, D_BITSIZE_SIZE)
 
             ###### ---- INITIALIZE NEW CHUNK ----- ######
             chk_dt_cnt, chk_dt_bitsize = 0, 0
@@ -140,7 +140,7 @@ def fp_delta_encoding(geometry, d_size, deltas):
 
             # Preparing chunk size (number of deltas)
             chk_hdr_offset = len(bits)
-            bits.extend(uint_to_ba(0, D_CNT_SIZE)) # Reserve space for 'chk_dt_cnt'
+            bits.extend(uint_to_ba(0, cfg.D_CNT_SIZE)) # Reserve space for 'chk_dt_cnt'
             if STORE_DT_BITSIZE:
                 # Size of chunk is needed when variable-length compression is used
                 bits.extend(uint_to_ba(0, D_BITSIZE_SIZE)) # Reserve space for bit size of deltas
@@ -162,10 +162,10 @@ def fp_delta_encoding(geometry, d_size, deltas):
     if cfg.COMPRESS_CHUNK:
         bits, chk_dt_bitsize = compress_chunk(bits, chk_hdr_offset, chk_dt_bitsize)
 
-    bits[chk_hdr_offset:chk_hdr_offset + D_CNT_SIZE] = uint_to_ba(chk_dt_cnt, D_CNT_SIZE)
+    bits[chk_hdr_offset:chk_hdr_offset + cfg.D_CNT_SIZE] = uint_to_ba(chk_dt_cnt, cfg.D_CNT_SIZE)
     if STORE_DT_BITSIZE:
         # Store the gain from compression/entropy coding
-        bits[chk_hdr_offset + D_CNT_SIZE:chk_hdr_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = int_to_ba(chk_dt_cnt * d_size * 2 - chk_dt_bitsize, D_BITSIZE_SIZE)
+        bits[chk_hdr_offset + cfg.D_CNT_SIZE:chk_hdr_offset + cfg.D_CNT_SIZE + D_BITSIZE_SIZE] = int_to_ba(chk_dt_cnt * d_size * 2 - chk_dt_bitsize, D_BITSIZE_SIZE)
    
     bits = intersection_append_header(bits)
     
@@ -175,7 +175,7 @@ def fp_delta_encoding(geometry, d_size, deltas):
 
 def calculate_delta_size(geometry, return_deltas=False):
     deltas = [[], []]
-    RESET_POINT_SIZE = FLOAT_SIZE * 2 + D_CNT_SIZE
+    RESET_POINT_SIZE = FLOAT_SIZE * 2 + cfg.D_CNT_SIZE
     coords = shapely.get_coordinates(geometry)
     prev = [0, 0]
     bit_cnts = {}
