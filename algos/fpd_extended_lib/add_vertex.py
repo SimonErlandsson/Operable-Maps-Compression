@@ -1,14 +1,42 @@
 import time
+import bisect
 from shapely import GeometryType as GT
 from bitarray import bitarray
 from algos.fpd_extended_lib.helpers import *
 from algos.fpd_extended_lib.cfg import *
 import algos.fpd_extended_lib.cfg
 from algos.fpd_extended_lib.low_level import *
-from algos.fpd_extended_lib.decompress import *
 
 # Not implemented to work with COMPRESS_CHUNK==TRUE or USE_ENTROPY==True
 def add_vertex(self, args):
+    bin_in, insert_idx, pos = args
+    if DISABLE_OPTIMIZED_ADD_VERTEX:
+        from algos.alg_fpd_extended import decompress, compress
+        s = time.perf_counter()
+
+        _, geometry = decompress(None, bin_in)
+        ragged = shapely.to_ragged_array([geometry])
+        points = ragged[1]
+        is_linestring = shapely.get_type_id(geometry) == shapely.GeometryType.LINESTRING
+
+        # Use binary search O(log n) to find the index of the first element greater than insert_idx
+        end_idx = min(len(ragged[2][0]) - 1, bisect.bisect_right(ragged[2][0], insert_idx))
+
+        # Is the first coordinate in the ring?
+        if ragged[2][0][end_idx - 1] == insert_idx and not is_linestring:
+                points = np.delete(points, ragged[2][0][end_idx] - 1, axis=0)
+        else:
+            for i in range(end_idx, len(ragged[2][0])):
+                    ragged[2][0][i] += 1
+                    
+        points = np.insert(points, insert_idx, pos, axis=0)        
+ 
+        geometry = shapely.from_ragged_array(geometry_type=shapely.get_type_id(geometry), coords=points, offsets=ragged[2])[0]
+        _, bin_in = compress(None, geometry)
+        
+        t = time.perf_counter()
+        return t - s, bin_in
+
     """
     DO NOT USE ENTROPY OR CHUNK COMPRESSION WHEN CALLING METHOD.
     """
@@ -21,7 +49,6 @@ def add_vertex(self, args):
         middle.frombytes(double_to_bytes(reset_point[1]))
         return middle
 
-    bin_in, insert_idx, pos = args
     s = time.perf_counter()
 
     cfg.offset = 0

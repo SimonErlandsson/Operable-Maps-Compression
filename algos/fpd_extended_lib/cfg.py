@@ -19,12 +19,11 @@ RING_CHK_CNT_SIZE = 30
 MAX_NUM_DELTAS = 15  # Max number of deltas in a chunk before split
 D_CNT_SIZE = required_bits(MAX_NUM_DELTAS + 1)
 
+BASELINE_ON = False
 # Disable optimized FPDE operations
-DISABLE_OPTIMIZED_INTERSECTION = False
-DISABLE_OPTIMIZED_BOUNDING_BOX = False
-
-OPTIMIZED = True
-POINT_ERR_TOL = 1e-12 if USE_DEFAULT_DOUBLE else 1e-10
+DISABLE_OPTIMIZED_INTERSECTION = False if not BASELINE_ON else True
+DISABLE_OPTIMIZED_ADD_VERTEX = False if not BASELINE_ON else True
+DISABLE_OPTIMIZED_BOUNDING_BOX = False if not BASELINE_ON else True
 
 # Do not tweak manually
 binary_length = 0 # Used when parsing
@@ -36,7 +35,7 @@ USE_ENTROPY = ENTROPY_METHOD != EM.NONE
 COMPRESS_CHUNK = CHUNK_COMP_METHOD != CM.NONE
 
 
-# Use "custom float size": TODO: Seems broken now
+# Use "custom float size":
 EXPONENT = 6 # Always defined, but not used if below are commented out
 # FLOAT_SIZE = 40  #Has to be multiple of 8
 # USE_FPINT = False
