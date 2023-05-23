@@ -22,6 +22,9 @@ for f in glob.glob(ENTROPY_BASE_PATH + '/*'):
             huffman_codecs[bit_size] = codec
             huffman_decodecs[bit_size] = decodetree(codec)
 
+def uint_to_ba(x, length):
+    from algos.fpd_extended_lib.low_level import uint_to_ba as uint_to_ba_optimized
+    return uint_to_ba_optimized(x, length)
     
 def encode(msg, delta_len):
     if cfg.ENTROPY_METHOD == EM.HUFFMAN:

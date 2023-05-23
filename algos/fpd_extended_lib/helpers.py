@@ -1,3 +1,4 @@
+from collections import defaultdict
 import math
 import zlib
 import gzip
@@ -8,20 +9,24 @@ from algos.fpd_extended_lib.low_level import *
 from algos.fpd_extended_lib.decompress import *
 
 
-def get_chunks(bin_in, include_next_start=True):
+def get_chunks(bin_in, include_next_start=True, verbose=False):
     """
     # DEBUG ONLY!
     Only used for non-timed operations, i.e. debugging/testing implementations
     # NOTE: Can also return the first ring coordinate when reaching end of ring!
     # DO NOT USE ENTROPY OR CHUNK COMPRESSION WHEN CALLING METHOD.
+    # Verbose can be set to True for stats.
     """
     assert(not(cfg.USE_ENTROPY or cfg.COMPRESS_CHUNK))
+    # {'Poly Ring Cnt Max': 0, 'Ring Chk Cnt Max': 0, 'Chk Deltas Cnt Max': 0}, {'Global Header Bitsize': 0, 'Poly Ring Cnt Bitsize': 0, 'Ring Chk Cnt Bitsize': 0, 'Chk Deltas Cnt Bitsize': 0, 'Full Coordinates Bitsize': 0, 'Deltas Bitsize': 0}
+    stats = [defaultdict(int), defaultdict(int)]
     chunks = []
     cfg.offset = 0
     bin = bitarray(endian='big')
     bin.frombytes(bin_in)
 
     delta_size, type = decode_header(bin)
+    stats[1]['Global Header Bitsize'] = cfg.offset
     # Type specific variables
     is_linestring = type == GT.LINESTRING
     is_multipolygon = type == GT.MULTIPOLYGON
@@ -35,15 +40,22 @@ def get_chunks(bin_in, include_next_start=True):
     while (cfg.offset + EOF_THRESHOLD <= bin_len):
         if is_multipolygon and rings_left == 0:
             rings_left = bytes_to_uint(bin, POLY_RING_CNT_SIZE)
+            stats[1]['Poly Ring Cnt Bitsize'] += POLY_RING_CNT_SIZE
+            stats[0]['Poly Ring Cnt Max'] = max(rings_left, stats[0]['Poly Ring Cnt Max'])
         if not is_linestring and chunks_in_ring_left == 0:
             chunks_in_ring_left = bytes_to_uint(bin, RING_CHK_CNT_SIZE)
             chunks_in_ring = chunks_in_ring_left
+            stats[1]['Ring Chk Cnt Bitsize'] += RING_CHK_CNT_SIZE
+            stats[0]['Ring Chk Cnt Max'] = max(chunks_in_ring, stats[0]['Ring Chk Cnt Max'])
 
         deltas_in_chunk = bytes_to_uint(bin, cfg.D_CNT_SIZE)
+        stats[1]['Chk Deltas Cnt Bitsize'] += cfg.D_CNT_SIZE
+        stats[0]['Chk Deltas Cnt Max'] = max(deltas_in_chunk, stats[0]['Chk Deltas Cnt Max'])
 
         # Extract reset point
         x = bytes_to_double(bin)
         y = bytes_to_double(bin)
+        stats[1]['Full Coordinates Bitsize'] += 2 * FLOAT_SIZE
         if chunks_in_ring_left == chunks_in_ring:
             x_ring, y_ring = (x, y)
         elif include_next_start:
@@ -55,6 +67,7 @@ def get_chunks(bin_in, include_next_start=True):
         for _ in range(deltas_in_chunk):
             x = bytes_to_decoded_coord(bin, x, delta_size)
             y = bytes_to_decoded_coord(bin, y, delta_size)
+            stats[1]['Deltas Bitsize'] += 2 * delta_size
             chunk.append([x, y])
         chunks.append(chunk)
         is_last_ring_chunk.append(False)
@@ -64,7 +77,11 @@ def get_chunks(bin_in, include_next_start=True):
                 chunks[-1].append([x_ring, y_ring])
             rings_left -= 1
             is_last_ring_chunk[-1] = True
-    return chunks, is_last_ring_chunk
+
+    if verbose:
+        return chunks, is_last_ring_chunk, stats
+    else:
+        return chunks, is_last_ring_chunk
 
 
 def access_vertex(bin_in, idx, cache=[]):

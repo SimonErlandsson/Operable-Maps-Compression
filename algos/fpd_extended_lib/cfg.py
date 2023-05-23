@@ -5,7 +5,7 @@ CM = Enum('CM', ['ZLIB', 'GZIP', 'ARITHMETIC', 'NONE'])
 required_bits = lambda x: int(np.ceil(np.log2(x + 2)))
 
 # If true: use "normal" FPD, else use "32-bit integer reprs.".
-USE_DEFAULT_DOUBLE = True
+USE_DEFAULT_DOUBLE = False
 
 # Enable per delta entropy compression
 ENTROPY_METHOD = EM.NONE # 'HUFFMAN', 'GOLOMB', 'AUTO', 'NONE'.
