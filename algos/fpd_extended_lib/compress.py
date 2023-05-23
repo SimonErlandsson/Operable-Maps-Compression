@@ -41,7 +41,8 @@ def append_header(bits, geometry, d_size, deltas):
     # Meta data
     bits.frombytes(uchar_to_bytes(d_size))
     bits.frombytes(uchar_to_bytes(int(shapely.get_type_id(geometry))))  # 1 byte is enough for storing type
-    bits.frombytes(uchar_to_bytes(cfg.ENTROPY_PARAM))
+    if cfg.USE_ENTROPY:
+        bits.frombytes(uchar_to_bytes(cfg.ENTROPY_PARAM))
     # Bounding Box
     if not DISABLE_OPTIMIZED_BOUNDING_BOX:
         bounds = shapely.bounds(geometry)

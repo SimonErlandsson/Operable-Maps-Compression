@@ -59,10 +59,17 @@ def polygon_decoder(bin, multipolygon_coords, delta_size):
 
 def decode_header(bin):
     from algos.fpd_extended_lib.intersection_chunk_bbox_wrapper import intersection_skip_header
-    delta_size, type, entropy_param = struct.unpack_from('!BBB', bin)
+   
+    if cfg.USE_ENTROPY:
+        delta_size, type, entropy_param = struct.unpack_from('!BBB', bin)
+        type = GT(type)
+        decode_entropy_param(entropy_param, delta_size)
+        cfg.offset += 3 * 8  # Offset is 3 bytes for BBB + FLOAT_SIZE * 4 for bounding box
+    else:
+        delta_size, type = struct.unpack_from('!BB', bin)
+        cfg.offset += 2 * 8  # Offset is 3 bytes for BBB + FLOAT_SIZE * 4 for bounding box
+    
     type = GT(type)
-    decode_entropy_param(entropy_param, delta_size)
-    cfg.offset += 3 * 8  # Offset is 3 bytes for BBB + FLOAT_SIZE * 4 for bounding box
     if not cfg.DISABLE_OPTIMIZED_BOUNDING_BOX:
         cfg.offset += 4 * FLOAT_SIZE
     intersection_skip_header(bin) # Circular import

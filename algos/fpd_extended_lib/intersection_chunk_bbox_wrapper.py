@@ -60,7 +60,8 @@ def intersection_skip_header(bin):
     cfg.offset += INTERSECTION_CHK_CNT_SIZE + 4 * FLOAT_SIZE * chk_cnt
 
 def get_chunk_bounds(bin_in):
-    cfg.offset = 3 * 8 + (4 * FLOAT_SIZE if not cfg.DISABLE_OPTIMIZED_BOUNDING_BOX else 0) # Skip normal header
+    init_offset = 3 * 8 if cfg.USE_ENTROPY else 2 * 8
+    cfg.offset = init_offset + (4 * FLOAT_SIZE if not cfg.DISABLE_OPTIMIZED_BOUNDING_BOX else 0) # Skip normal header
     chk_cnt = struct.unpack_from('!I', bin_in, offset=cfg.offset//8)[0]
     bin = bitarray(endian='big')
     bin.frombytes(bin_in)

@@ -100,7 +100,8 @@ def bounding_box(self, bin):
     if not DISABLE_OPTIMIZED_BOUNDING_BOX:
         res = bitarray()
         res.frombytes(bin)
-        bounds = [bin_to_double(res[3 * 8 + FLOAT_SIZE * i: 3 * 8 + FLOAT_SIZE * (i + 1)]) for i in range(4)]
+        init_offset = 2 * 8 if not cfg.USE_ENTROPY else 3 * 8
+        bounds = [bin_to_double(res[init_offset + FLOAT_SIZE * i: init_offset + FLOAT_SIZE * (i + 1)]) for i in range(4)]
     else:
         _, geometry = self.decompress(bin)
         bounds = shapely.bounds(geometry)
