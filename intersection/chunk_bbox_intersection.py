@@ -13,13 +13,51 @@ import algos.fpd_extended_lib.cfg as cfg
 
 fpd = FpdExtended()
 
+#Extract the bounding box based on settings
 def bounding_box(bin, s):
     if not DISABLE_OPTIMIZED_INTERSECTION:
         return fpd.bounding_box(bin)[1]
     else:
         return glob_bounding_boxes[s]
-      
-#@profile
+
+#Calculates if two given bounding boxes overlap
+def is_bboxs_intersecting(bbox_1, bbox_2):
+    return min(bbox_1[2], bbox_2[2]) >= max(bbox_1[0], bbox_2[0]) and min(bbox_1[3], bbox_2[3]) >= max(bbox_1[1], bbox_2[1])
+
+
+def calculate_final_stats(start_time):
+        perf_counter[3] = time.perf_counter() - start_time        
+        return perf_counter
+
+def select_return(get_stats, ret_value, start_time):
+    if not get_stats:
+        return ret_value
+    else:
+        return calculate_final_stats(start_time), ret_value
+    
+
+#Checks if segments are parallell to each other
+def are_lines_parallel(seg1, seg2):
+        (x1, y1), (x2, y2) = seg1[0], seg1[1]
+        (x3, y3),(x4, y4) = seg2[0], seg2[1]
+
+        return ((y2 - y1) / (x2 - x1) if (x2 - x1) != 0 else float('inf')) == ((y4 - y3) / (x4 - x3) if (x4 - x3) != 0 else float('inf'))
+     
+
+def get_chunk(bin, idx, offset_cache=None, glob_idx = None): 
+    s = time.perf_counter()
+    if not DISABLE_OPTIMIZED_INTERSECTION:
+        res = fpd.get_chunk(bin, idx, offset_cache=offset_cache)[0] # Can also use slow above for debugging
+    else: 
+        res = [tuple(l) for l in glob_chunks[glob_idx][idx]]
+    perf_counter[0] += time.perf_counter() - s
+    return res
+
+
+def chunk_to_shape(chk): return LineString(chk) if len(chk) != 1 else  Point(chk[0]) #Convert chunk segments to shapely object
+
+
+#Calculate the global variables for chunks and bounding boxes when DISABLE_OPTIMIZED_INTERSECTION = True
 def calculate_globals(bins):
     global perf_counter
     perf_counter = [0, 0, 0, 0]
@@ -54,25 +92,8 @@ def calculate_globals(bins):
         perf_counter[0] += time.perf_counter() - start_time
 
 
-def are_lines_parallel(seg1, seg2):
-        x1, y1 = seg1[0]
-        x2, y2 = seg1[1]
-        x3, y3 = seg2[0]
-        x4, y4 = seg2[1]
-
-        return ((y2 - y1) / (x2 - x1) if (x2 - x1) != 0 else float('inf')) == ((y4 - y3) / (x4 - x3) if (x4 - x3) != 0 else float('inf'))
-     
-
-#@profile
-def is_bboxs_intersecting(bbox_1, bbox_2):
-    """Calculates if two given bounding boxes overlap"""
-
-    #Calculates if two given bounding boxes overlap
-    return min(bbox_1[2], bbox_2[2]) >= max(bbox_1[0], bbox_2[0]) and min(bbox_1[3], bbox_2[3]) >= max(bbox_1[1], bbox_2[1])
-
-#@profile
+#Calculate the common bounding box from two FPDE compressed binaries
 def common_bbox(bins):  
-    """Calculate the common bounding box from two FPDE compressed binaries"""
     s = time.perf_counter()
     # Left, bottom, right, top of bounding boxes
     x_l_1, y_b_1, x_r_1, y_t_1 = bounding_box(bins[0], 0)
@@ -100,28 +121,13 @@ def common_bbox(bins):
     return ([x_l, y_b, x_r, y_t], type)
 
 
-# --------- METHODS REQUIRING IMPLEMENTATIONS IN FPDE ---------------
-# def slow_get_chunk(bin, idx, include_next=True):
-#     chunks, is_last_chunk_ring = fpd.get_chunks(bin)
-#     _, type = fpd.type(bin)
-#     vertices = chunks[idx]
-#     if not is_last_chunk_ring[idx] and type != 'LineString':
-#         vertices += [chunks[idx + 1][0]]
-#     return vertices
-
-#chunks_bounds, _ = calculate_chunks_bounds(bin)
-# --------- /END/ METHODS REQUIRING IMPLEMENTATIONS IN FPDE ---------------
-
-
-#@profile
+#Get chunk indexes in FPDE binary containing a segment connected to the given bounding box.
+# Also return the bounds of the geometry if get_geom_bounds=True
 def get_chunks_idxs_within_bounds(bin, bbox, glob_idx, get_geom_bounds=False):
-    """Get chunk indexes in FPDE binary containing a segment connected to the given bounding box.
-    Also return the bounds of the geometry if get_geom_bounds=True"""
     s = time.perf_counter()
     if DISABLE_OPTIMIZED_INTERSECTION:
         chunks_bounds = glob_chunk_bounds[glob_idx]
         perf_counter[1] += len(glob_chunks[glob_idx])
-    
     else:
         chunks_bounds = fpd.get_chunk_bounds(bin) #Get bounds from geometry
 
@@ -134,22 +140,6 @@ def get_chunks_idxs_within_bounds(bin, bbox, glob_idx, get_geom_bounds=False):
     return res
 
 
-#@profile
-def get_chunk(bin, idx, offset_cache=None, glob_idx = None): 
-    s = time.perf_counter()
-    if not DISABLE_OPTIMIZED_INTERSECTION:
-        res = fpd.get_chunk(bin, idx, offset_cache=offset_cache)[0] # Can also use slow above for debugging
-    else: 
-        res = [tuple(l) for l in glob_chunks[glob_idx][idx]]
-    perf_counter[0] += time.perf_counter() - s
-    return res
-
-
-#@profile
-def chunk_to_shape(chk): return LineString(chk) if len(chk) != 1 else  Point(chk[0]) #Convert chunk segments to shapely object
-
-
-#@profile
 def is_contained_within(containee, container, container_bounds, glob_idx = None, debug_correct_ans=None, plot_all=False, cache=None):
     '''
     Containee is either FPDE binary object or a tuple of coordinates. Uses Ray Casting algorithm to
@@ -222,18 +212,10 @@ def is_contained_within(containee, container, container_bounds, glob_idx = None,
 
     return len(intersecting_points) % 2 == 1
 
-#@profile
-def is_point_on_segment(ax, ay, bx, by, cx, cy, epsilon=1e-13):
-    return abs(math.hypot(bx - ax, by - ay) - (math.hypot(cx - ax, cy - ay) +  math.hypot(bx - cx, by - cy))) < epsilon
-
 
 # Based on the common bbox, extracts the chunks for both geometries within the bbox,
 # and performs intersection testing between the line segments.
-#@profile
 def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=False, cache=None):
-    """Based on the common bbox, extracts the chunks for both geometries within the bbox,
-    and performs intersection testing between the line segments."""
-
     offset_cache = [{}, {}]
     intersecting_points = []
 
@@ -256,7 +238,6 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
 
     #Only include chunks which have any intersection with any other bbox chunk of the other geometry
     chks_filt =  [set(), set(), set()] #Last index is for saving chunks that overlap to minimize line intersection calls
-
     for chk1 in chk_idxs[0]:
         for chk2 in chk_idxs[1]:
             if is_bboxs_intersecting(bounds[0][chk1], bounds[1][chk2]):
@@ -265,6 +246,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
                     chks_filt[0].add(chk1)
                     chks_filt[1].add(chk2)
     
+    #If Is_intersection: Do not create mock segments for "not yet" unfolded chunk
     if res_list == None:
         chk_idxs = chks_filt    
     
@@ -275,14 +257,13 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
     
     #Extract data for the relevant chunks
     for i in range(2):
-        
-        chk_coords[i] = {c_i: [(None,c_i), (None,c_i)] if c_i not in chks_filt[i] and not DISABLE_OPTIMIZED_INTERSECTION else get_chunk(bins[i], c_i, offset_cache=offset_cache[i], glob_idx=i) for c_i in chk_idxs[i]} # Get chunk -> coordinates for those inside common boudning box
-        chk_polylines[i] = {c_i: chunk_to_shape(coords) for c_i, coords in chk_coords[i].items() if c_i in chks_filt[i] or DISABLE_OPTIMIZED_INTERSECTION} #Chunk -> polylines used in isintersection checks
-        
-
-        #UNCOMMENT IF NOT WANT TO UNFOLD CHUNKS WHEN ARRIVING TO THEM
-        # chk_coords[i] = {c_i: get_chunk(bins[i], c_i, offset_cache=offset_cache[i], glob_idx=i) for c_i in chk_idxs[i]} # Get chunk -> coordinates for those inside common boudning box
-        # chk_polylines[i] = {c_i: chunk_to_shape(coords) for c_i, coords in chk_coords[i].items()} #Chunk -> polylines used in isintersection checks
+        if not DISABLE_OPTIMIZED_UNPACKING:
+            #Create mock segment if chunk from geometry 1 do not intersecting with another chunk from geometry 2. For DISABLE_OPTIMIZED_INTERSECTION, it is unnessesary since  chunks is  already unpacked fully
+            chk_coords[i] = {c_i: [(None,c_i), (None,c_i)] if c_i not in chks_filt[i] and not DISABLE_OPTIMIZED_INTERSECTION else get_chunk(bins[i], c_i, offset_cache=offset_cache[i], glob_idx=i) for c_i in chk_idxs[i]} # Get chunk -> coordinates for those inside common boudning box
+            chk_polylines[i] = {c_i: chunk_to_shape(coords) for c_i, coords in chk_coords[i].items() if c_i in chks_filt[i] or DISABLE_OPTIMIZED_INTERSECTION} #Chunk -> polylines used in isintersection checks
+        else:    
+            chk_coords[i] = {c_i: get_chunk(bins[i], c_i, offset_cache=offset_cache[i], glob_idx=i) for c_i in chk_idxs[i]} # Get chunk -> coordinates for those inside common boudning box
+            chk_polylines[i] = {c_i: chunk_to_shape(coords) for c_i, coords in chk_coords[i].items()} #Chunk -> polylines used in isintersection checks
         
         
         chks[i] = list(chk_coords[i].values()) # Get chunk coords
@@ -369,40 +350,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
     res_list.append(offset_cache)
 
 
-
-def is_intersecting(bins, debug_correct_ans=None, plot_all=False, get_stats=False):
-    start_time = time.perf_counter()
-    calculate_globals(bins)
-    cache = [{},{}]
-    bbox, overlap_type = common_bbox(bins)
-    
-    if bbox == None:
-        return select_return(get_stats, False, start_time)
-
-
-    # Bounding boxes intersect. Assume no intersection, ensure that no intersection is in fact occuring:
-    # 1. Find all chunks which are inside the common bounding box
-    #    Construct LineStrings and check for intersections
-    intersects, bounds = line_intersection(bins, bbox, debug_correct_ans, plot_all=plot_all, cache=cache)
-    if intersects:
-        return select_return(get_stats, True, start_time)
-
-    # 2. Ensure that the polygon is not fully contained
-    #    Send ray and verify that it hits other polygon zero or even amount of times
-    #    - Possibly pick point closest to other polygon's bounding box
-
-    if overlap_type == '1 in 2':
-        res = is_contained_within(bins[0], bins[1], bounds[1], glob_idx=1, debug_correct_ans=debug_correct_ans, plot_all=plot_all,cache=cache[1])
-    elif overlap_type == '2 in 1':
-        res = is_contained_within(bins[1], bins[0], bounds[0], glob_idx=0, debug_correct_ans=debug_correct_ans, plot_all=plot_all, cache=cache[0])
-    else:
-        res = False
-
-    return select_return(get_stats, res, start_time)
-
-
 # Returns the possible paths (directed segment) from an intersection point. Also checks that it is within both shapes.
-#@profile
 def possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to_middle_point, bins, cache):
     possible_paths, removed = [], False
     seg_idxs = cross_to_seg[c_i]
@@ -457,7 +405,38 @@ def possible_paths(c_i, bounds, cross_to_seg, seg_to_cross, seg_to_point, seg_to
     # DEBUG_print_paths(possible_paths)
     return possible_paths, removed
 
-#@profile
+
+def is_intersecting(bins, debug_correct_ans=None, plot_all=False, get_stats=False):
+    start_time = time.perf_counter()
+    calculate_globals(bins)
+    cache = [{},{}]
+    bbox, overlap_type = common_bbox(bins)
+    
+    if bbox == None:
+        return select_return(get_stats, False, start_time)
+
+
+    # Bounding boxes intersect. Assume no intersection, ensure that no intersection is in fact occuring:
+    # 1. Find all chunks which are inside the common bounding box
+    #    Construct LineStrings and check for intersections
+    intersects, bounds = line_intersection(bins, bbox, debug_correct_ans, plot_all=plot_all, cache=cache)
+    if intersects:
+        return select_return(get_stats, True, start_time)
+
+    # 2. Ensure that the polygon is not fully contained
+    #    Send ray and verify that it hits other polygon zero or even amount of times
+    #    - Possibly pick point closest to other polygon's bounding box
+
+    if overlap_type == '1 in 2':
+        res = is_contained_within(bins[0], bins[1], bounds[1], glob_idx=1, debug_correct_ans=debug_correct_ans, plot_all=plot_all,cache=cache[1])
+    elif overlap_type == '2 in 1':
+        res = is_contained_within(bins[1], bins[0], bounds[0], glob_idx=0, debug_correct_ans=debug_correct_ans, plot_all=plot_all, cache=cache[0])
+    else:
+        res = False
+
+    return select_return(get_stats, res, start_time)
+
+
 def intersection(bins, debug_correct_ans=None, plot_all=False, get_stats=False):
     start_time = time.perf_counter()
     calculate_globals(bins)
@@ -578,6 +557,11 @@ def intersection(bins, debug_correct_ans=None, plot_all=False, get_stats=False):
                     while(next_seg_idx > -1 and next_seg_idx < len(segments[s]) and segments[s][next_seg_idx][0][0] == None):
                         follow_chunk = get_chunk(bins[s], segments[s][next_seg_idx][0][1], offset_cache=offset_cache[s]) #compress that chunk
                         follow_segments = [(follow_chunk[i], follow_chunk[i + 1]) for i in range(len(follow_chunk) - 1)]  #Create  the segments
+                        
+                        #If there is no segments to  traverse
+                        if len(follow_segments) == 0:
+                            break
+            
                         curr_start = follow_segments[0 if p_dir == 1 else -1][0 if p_dir == 1 else -1] #Create the start
                         if curr_start == end_vertex: #Check if current chunk is continuous to the previous one
                             end_vertex = follow_segments[-1 if p_dir == 1 else 0][-1 if p_dir == 1 else 0] #Update previous index to be this one for the next chunk/segment
@@ -670,14 +654,3 @@ def intersection(bins, debug_correct_ans=None, plot_all=False, get_stats=False):
         res = result[0]
 
     return select_return(get_stats, res, start_time)
-
-
-def calculate_final_stats(start_time):
-        perf_counter[3] = time.perf_counter() - start_time        
-        return perf_counter
-
-def select_return(get_stats, ret_value, start_time):
-    if not get_stats:
-        return ret_value
-    else:
-        return calculate_final_stats(start_time), ret_value
