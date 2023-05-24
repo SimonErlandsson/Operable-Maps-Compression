@@ -45,12 +45,23 @@ def intersection_append_header(bits):
         return bits
         
     left = bits[0:chunk_bounds_offset]
-    left.extend(uint_to_ba(len(chunk_bboxes), INTERSECTION_CHK_CNT_SIZE)) # Store nbr of chunks
-    for bbox in chunk_bboxes:
-        for i in range(4):
-            left.frombytes(double_to_bytes(bbox[i]))
-    right = bits[chunk_bounds_offset:]
-    left.extend(right)
+    if DELTA_ENCODE_CHUNK_BBOXES:
+        from algos.fpd_extended_lib.compress import calculate_delta_size
+        
+        left.extend(uint_to_ba(len(chunk_bboxes), INTERSECTION_CHK_CNT_SIZE)) # Store nbr of chunks
+        for bbox in chunk_bboxes:
+            for i in range(4):
+                left.frombytes(double_to_bytes(bbox[i]))
+        right = bits[chunk_bounds_offset:]
+        left.extend(right)
+
+    else:
+        left.extend(uint_to_ba(len(chunk_bboxes), INTERSECTION_CHK_CNT_SIZE)) # Store nbr of chunks
+        for bbox in chunk_bboxes:
+            for i in range(4):
+                left.frombytes(double_to_bytes(bbox[i]))
+        right = bits[chunk_bounds_offset:]
+        left.extend(right)
     return left
 
 def intersection_skip_header(bin):

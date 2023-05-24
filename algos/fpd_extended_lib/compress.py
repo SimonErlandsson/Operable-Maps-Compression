@@ -174,10 +174,11 @@ def fp_delta_encoding(geometry, d_size, deltas):
     #print([int.from_bytes(i, 'big') for i in bits.tobytes()], '\n')
     return bits.tobytes()
 
-def calculate_delta_size(geometry, return_deltas=False):
+def calculate_delta_size(geometry=None, coords=None, return_deltas=False):
     deltas = [[], []]
     RESET_POINT_SIZE = FLOAT_SIZE * 2 + cfg.D_CNT_SIZE
-    coords = shapely.get_coordinates(geometry)
+    if geometry != None:
+        coords = shapely.get_coordinates(geometry)
     prev = [0, 0]
     bit_cnts = {}
     for coord in coords:
