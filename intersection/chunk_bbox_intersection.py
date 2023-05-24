@@ -9,6 +9,7 @@ import math
 from collections import deque 
 import itertools
 import time 
+import algos.fpd_extended_lib.cfg as cfg
 
 fpd = FpdExtended()
 
@@ -225,7 +226,6 @@ def is_contained_within(containee, container, container_bounds, glob_idx = None,
 def is_point_on_segment(ax, ay, bx, by, cx, cy, epsilon=1e-13):
     return abs(math.hypot(bx - ax, by - ay) - (math.hypot(cx - ax, cy - ay) +  math.hypot(bx - cx, by - cy))) < epsilon
 
-   
 
 # Based on the common bbox, extracts the chunks for both geometries within the bbox,
 # and performs intersection testing between the line segments.
@@ -255,18 +255,18 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
         chk_idxs[i], bounds[i] = get_chunks_idxs_within_bounds(bins[i], bbox, glob_idx=i, get_geom_bounds=True) #Get all bounds for a geometry as well as idxes which overlap in common bounding box
 
     #Only include chunks which have any intersection with any other bbox chunk of the other geometry
-    chk_idxs_filtered =  [set(), set(), set()] #Last index is for saving chunks that overlap to minimize line intersection calls
+    chks_filt =  [set(), set(), set()] #Last index is for saving chunks that overlap to minimize line intersection calls
 
     for chk1 in chk_idxs[0]:
         for chk2 in chk_idxs[1]:
             if is_bboxs_intersecting(bounds[0][chk1], bounds[1][chk2]):
-                chk_idxs_filtered[2].add((chk1, chk2))
-                if res_list == None:
-                    chk_idxs_filtered[0].add(chk1)
-                    chk_idxs_filtered[1].add(chk2)
+                chks_filt[2].add((chk1, chk2))
+                if not DISABLE_OPTIMIZED_INTERSECTION or res_list == None:
+                    chks_filt[0].add(chk1)
+                    chks_filt[1].add(chk2)
     
     if res_list == None:
-        chk_idxs = chk_idxs_filtered    
+        chk_idxs = chks_filt    
     
     #Get how many chunks we are unfoldning data
     if not DISABLE_OPTIMIZED_INTERSECTION:
@@ -276,10 +276,16 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
     #Extract data for the relevant chunks
     for i in range(2):
         
-        chk_coords[i] = {c_i: get_chunk(bins[i], c_i, offset_cache=offset_cache[i], glob_idx=i) for c_i in chk_idxs[i]} # Get chunk -> coordinates for those inside common boudning box
-        chks[i] = list(chk_coords[i].values()) # Get chunk coords
+        chk_coords[i] = {c_i: [(None,c_i), (None,c_i)] if c_i not in chks_filt[i] and not DISABLE_OPTIMIZED_INTERSECTION else get_chunk(bins[i], c_i, offset_cache=offset_cache[i], glob_idx=i) for c_i in chk_idxs[i]} # Get chunk -> coordinates for those inside common boudning box
+        chk_polylines[i] = {c_i: chunk_to_shape(coords) for c_i, coords in chk_coords[i].items() if c_i in chks_filt[i] or DISABLE_OPTIMIZED_INTERSECTION} #Chunk -> polylines used in isintersection checks
+        
 
-        chk_polylines[i] = {c_i: chunk_to_shape(coords) for c_i, coords in chk_coords[i].items()} #Chunk -> polylines used in isintersection checks
+        #UNCOMMENT IF NOT WANT TO UNFOLD CHUNKS WHEN ARRIVING TO THEM
+        # chk_coords[i] = {c_i: get_chunk(bins[i], c_i, offset_cache=offset_cache[i], glob_idx=i) for c_i in chk_idxs[i]} # Get chunk -> coordinates for those inside common boudning box
+        # chk_polylines[i] = {c_i: chunk_to_shape(coords) for c_i, coords in chk_coords[i].items()} #Chunk -> polylines used in isintersection checks
+        
+        
+        chks[i] = list(chk_coords[i].values()) # Get chunk coords
         polylines[i] = list(chk_polylines[i].values()) # Transform each chunk to polyline
         cache[i] = chk_polylines[i]
 
@@ -299,7 +305,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
     #Loops through both geometrie's chunks, checks if polylines for those chunks intersect and if, save segment <-> crossings
     # for chk_idx1, polylines1 in chk_polylines[0].items():
     #     for chk_idx2, polylines2 in chk_polylines[1].items():
-    for (chk_idx1, chk_idx2) in chk_idxs_filtered[2]:
+    for (chk_idx1, chk_idx2) in chks_filt[2]:
             polylines1, polylines2 = chk_polylines[0][chk_idx1], chk_polylines[1][chk_idx2]
             if polylines1.intersects(polylines2):
                 
@@ -353,7 +359,6 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
 
     if len(intersecting_points) == 0:
         return False, bounds 
-    
 
     #Update results list (return value)
     res_list.append(intersecting_points)
@@ -361,6 +366,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
     res_list.append(seg_to_cross)
     res_list.append(cross_to_seg)
     res_list.append(bounds)
+    res_list.append(offset_cache)
 
 
 
@@ -516,7 +522,7 @@ def intersection(bins, debug_correct_ans=None, plot_all=False, get_stats=False):
 
 
 
-    intersecting_points, segments, seg_to_cross, cross_to_seg, bounds = line_data
+    intersecting_points, segments, seg_to_cross, cross_to_seg, bounds, offset_cache = line_data
     #print("Intersecting Points:", intersecting_points)
     cross_left = set(range(len(intersecting_points))) # Ids of unprocessed intersection points
     res_segs = deque() # Segments which are part of the resulting shape
@@ -557,16 +563,36 @@ def intersection(bins, debug_correct_ans=None, plot_all=False, get_stats=False):
                     visited_edges.update({(v1, v2), (v2, v1)})
                 else:
                     break
-
+                
                 e_v = v_idxs[1 if p_dir == 1 else 0] # Find index of actual end vertex (i.e. flip segment based on direction)
-
+                end_vertex = seg_to_point(s, seg_idx, e_v)
                 next_seg_idx = seg_idx + p_dir
+                
+                
                 if e_v > 1: # Is cross point?
                     break
-                elif next_seg_idx == -1 or next_seg_idx == len(segments[s]) or not seg_to_point(s, seg_idx, e_v) == seg_to_point(s, next_seg_idx, 0 if p_dir == 1 else 1): #<- HERE ERROR
+
+                #For checking if next chunk has not been unfolded yet
+                if next_seg_idx > -1 and next_seg_idx < len(segments[s]) and segments[s][next_seg_idx][0][0] == None:
+                    #While next chunk is an non-unfolded one
+                    while(next_seg_idx > -1 and next_seg_idx < len(segments[s]) and segments[s][next_seg_idx][0][0] == None):
+                        follow_chunk = get_chunk(bins[s], segments[s][next_seg_idx][0][1], offset_cache=offset_cache[s]) #compress that chunk
+                        follow_segments = [(follow_chunk[i], follow_chunk[i + 1]) for i in range(len(follow_chunk) - 1)]  #Create  the segments
+                        curr_start = follow_segments[0 if p_dir == 1 else -1][0 if p_dir == 1 else -1] #Create the start
+                        if curr_start == end_vertex: #Check if current chunk is continuous to the previous one
+                            end_vertex = follow_segments[-1 if p_dir == 1 else 0][-1 if p_dir == 1 else 0] #Update previous index to be this one for the next chunk/segment
+                            for v1, v2 in follow_segments: #Add all segments to resulting shape
+                                path_append([v1, v2])
+                                visited_edges.update({(v1, v2), (v2, v1)})
+                            next_seg_idx = next_seg_idx + p_dir
+                        else:
+                            break #Break if non continuous (Similar to the if below)
+
+                if next_seg_idx == -1 or next_seg_idx == len(segments[s]) or not end_vertex == seg_to_point(s, next_seg_idx, 0 if p_dir == 1 else 1): #<- HERE ERROR
                     break # Break if no more segments, or if path formed by segments is not continuous
                 else:
                     seg_idx = next_seg_idx # Next segment
+                    
 
                     seg_cross_cnt = len(seg_to_cross[s][seg_idx])
                     if p_dir == 1:
