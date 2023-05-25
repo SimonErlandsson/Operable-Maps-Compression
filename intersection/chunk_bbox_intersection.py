@@ -15,7 +15,7 @@ fpd = FpdExtended()
 
 #Extract the bounding box based on settings
 def bounding_box(bin, s):
-    if not DISABLE_OPTIMIZED_INTERSECTION:
+    if not cfg.DISABLE_OPTIMIZED_INTERSECTION or 'glob_bounding_boxes' not in globals():
         return fpd.bounding_box(bin)[1]
     else:
         return glob_bounding_boxes[s]
@@ -46,7 +46,8 @@ def are_lines_parallel(seg1, seg2):
 
 def get_chunk(bin, idx, offset_cache=None, glob_idx = None): 
     s = time.perf_counter()
-    if not DISABLE_OPTIMIZED_INTERSECTION:
+    if not cfg.DISABLE_OPTIMIZED_INTERSECTION:
+        perf_counter[1] += 1
         res = fpd.get_chunk(bin, idx, offset_cache=offset_cache)[0] # Can also use slow above for debugging
     else: 
         res = [tuple(l) for l in glob_chunks[glob_idx][idx]]
@@ -57,11 +58,11 @@ def get_chunk(bin, idx, offset_cache=None, glob_idx = None):
 def chunk_to_shape(chk): return LineString(chk) if len(chk) != 1 else  Point(chk[0]) #Convert chunk segments to shapely object
 
 
-#Calculate the global variables for chunks and bounding boxes when DISABLE_OPTIMIZED_INTERSECTION = True
+#Calculate the global variables for chunks and bounding boxes when cfg.DISABLE_OPTIMIZED_INTERSECTION = True
 def calculate_globals(bins):
     global perf_counter
     perf_counter = [0, 0, 0, 0]
-    if DISABLE_OPTIMIZED_INTERSECTION:
+    if cfg.DISABLE_OPTIMIZED_INTERSECTION:
         start_time = time.perf_counter()
 
         global glob_bounding_boxes
@@ -125,7 +126,7 @@ def common_bbox(bins):
 # Also return the bounds of the geometry if get_geom_bounds=True
 def get_chunks_idxs_within_bounds(bin, bbox, glob_idx, get_geom_bounds=False):
     s = time.perf_counter()
-    if DISABLE_OPTIMIZED_INTERSECTION:
+    if cfg.DISABLE_OPTIMIZED_INTERSECTION:
         chunks_bounds = glob_chunk_bounds[glob_idx]
         perf_counter[1] += len(glob_chunks[glob_idx])
     else:
@@ -177,8 +178,8 @@ def is_contained_within(containee, container, container_bounds, glob_idx = None,
     segments = []
     for c in chks:
         if c not in cache:
-            if not DISABLE_OPTIMIZED_INTERSECTION:
-                perf_counter[1] += 1
+            #if not cfg.DISABLE_OPTIMIZED_INTERSECTION:
+                
             chunk_shape = chunk_to_shape(get_chunk(container, c, glob_idx=glob_idx))
             cache[c] = chunk_shape
             segments.append(chunk_shape)
@@ -242,7 +243,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
         for chk2 in chk_idxs[1]:
             if is_bboxs_intersecting(bounds[0][chk1], bounds[1][chk2]):
                 chks_filt[2].add((chk1, chk2))
-                if not DISABLE_OPTIMIZED_INTERSECTION or res_list == None:
+                if not cfg.DISABLE_OPTIMIZED_INTERSECTION or res_list == None:
                     chks_filt[0].add(chk1)
                     chks_filt[1].add(chk2)
     
@@ -250,17 +251,12 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
     if res_list == None:
         chk_idxs = chks_filt    
     
-    #Get how many chunks we are unfoldning data
-    if not DISABLE_OPTIMIZED_INTERSECTION:
-        perf_counter[1] = len(chk_idxs[0]) + len(chk_idxs[1])
-
-    
     #Extract data for the relevant chunks
     for i in range(2):
         if not DISABLE_OPTIMIZED_UNPACKING:
-            #Create mock segment if chunk from geometry 1 do not intersecting with another chunk from geometry 2. For DISABLE_OPTIMIZED_INTERSECTION, it is unnessesary since  chunks is  already unpacked fully
-            chk_coords[i] = {c_i: [(None,c_i), (None,c_i)] if c_i not in chks_filt[i] and not DISABLE_OPTIMIZED_INTERSECTION else get_chunk(bins[i], c_i, offset_cache=offset_cache[i], glob_idx=i) for c_i in chk_idxs[i]} # Get chunk -> coordinates for those inside common boudning box
-            chk_polylines[i] = {c_i: chunk_to_shape(coords) for c_i, coords in chk_coords[i].items() if c_i in chks_filt[i] or DISABLE_OPTIMIZED_INTERSECTION} #Chunk -> polylines used in isintersection checks
+            #Create mock segment if chunk from geometry 1 do not intersecting with another chunk from geometry 2. For cfg.DISABLE_OPTIMIZED_INTERSECTION, it is unnessesary since  chunks is  already unpacked fully
+            chk_coords[i] = {c_i: [(None,c_i), (None,c_i)] if c_i not in chks_filt[i] and not cfg.DISABLE_OPTIMIZED_INTERSECTION else get_chunk(bins[i], c_i, offset_cache=offset_cache[i], glob_idx=i) for c_i in chk_idxs[i]} # Get chunk -> coordinates for those inside common boudning box
+            chk_polylines[i] = {c_i: chunk_to_shape(coords) for c_i, coords in chk_coords[i].items() if c_i in chks_filt[i] or cfg.DISABLE_OPTIMIZED_INTERSECTION} #Chunk -> polylines used in isintersection checks
         else:    
             chk_coords[i] = {c_i: get_chunk(bins[i], c_i, offset_cache=offset_cache[i], glob_idx=i) for c_i in chk_idxs[i]} # Get chunk -> coordinates for those inside common boudning box
             chk_polylines[i] = {c_i: chunk_to_shape(coords) for c_i, coords in chk_coords[i].items()} #Chunk -> polylines used in isintersection checks

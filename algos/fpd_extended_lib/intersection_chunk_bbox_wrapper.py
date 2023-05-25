@@ -20,7 +20,7 @@ def get_chunk_bboxes_len():
     return len(chunk_bboxes)
 
 def intersection_reserve_header(bits):
-    if DISABLE_OPTIMIZED_INTERSECTION:
+    if cfg.DISABLE_OPTIMIZED_INTERSECTION:
         return
     global chunk_bounds_offset
     global chunk_bboxes
@@ -28,20 +28,20 @@ def intersection_reserve_header(bits):
     chunk_bboxes = []
 
 def intersection_new_chunk():
-    if DISABLE_OPTIMIZED_INTERSECTION:
+    if cfg.DISABLE_OPTIMIZED_INTERSECTION:
         return
     global chunk_bboxes
     chunk_bboxes.append([999.0, 999.0, -999.0, -999.0])
 
 def intersection_add_point(x, y, previous_chunk=False):
-    if DISABLE_OPTIMIZED_INTERSECTION:
+    if cfg.DISABLE_OPTIMIZED_INTERSECTION:
         return
     i = -2 if previous_chunk else -1
     x_l, y_b, x_r, y_t = chunk_bboxes[i]
     chunk_bboxes[i] = [min(x, x_l), min(y, y_b), max(x, x_r), max(y, y_t)]
 
 def intersection_append_header(bits):
-    if DISABLE_OPTIMIZED_INTERSECTION:
+    if cfg.DISABLE_OPTIMIZED_INTERSECTION:
         return bits
         
     left = bits[0:chunk_bounds_offset]
@@ -95,7 +95,7 @@ def intersection_append_header(bits):
     return left
 
 def intersection_skip_header(bin):
-    if DISABLE_OPTIMIZED_INTERSECTION:
+    if cfg.DISABLE_OPTIMIZED_INTERSECTION:
         return
     if DELTA_ENCODE_CHUNK_BBOXES:
         cfg.offset += struct.unpack_from('!I', bin, offset=cfg.offset//8)[0]

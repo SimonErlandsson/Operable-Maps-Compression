@@ -97,7 +97,7 @@ def type(self, bin):
 
 def bounding_box(self, bin):
     s = time.perf_counter()
-    if not DISABLE_OPTIMIZED_BOUNDING_BOX:
+    if not cfg.DISABLE_OPTIMIZED_BOUNDING_BOX:
         res = bitarray()
         res.frombytes(bin)
         init_offset = 2 * 8 if not cfg.USE_ENTROPY else 3 * 8

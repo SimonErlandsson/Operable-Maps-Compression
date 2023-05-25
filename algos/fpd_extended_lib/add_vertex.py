@@ -4,13 +4,15 @@ from shapely import GeometryType as GT
 from bitarray import bitarray
 from algos.fpd_extended_lib.helpers import *
 from algos.fpd_extended_lib.cfg import *
+import algos.fpd_extended_lib.cfg as cfg
+
 import algos.fpd_extended_lib.cfg
 from algos.fpd_extended_lib.low_level import *
 
 # Not implemented to work with COMPRESS_CHUNK==TRUE or USE_ENTROPY==True
 def add_vertex(self, args):
     bin_in, insert_idx, pos = args
-    if DISABLE_OPTIMIZED_ADD_VERTEX:
+    if cfg.DISABLE_OPTIMIZED_ADD_VERTEX:
         from algos.alg_fpd_extended import decompress, compress
         s = time.perf_counter()
 

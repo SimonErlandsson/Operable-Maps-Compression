@@ -44,7 +44,7 @@ def append_header(bits, geometry, d_size, deltas):
     if cfg.USE_ENTROPY:
         bits.frombytes(uchar_to_bytes(cfg.ENTROPY_PARAM))
     # Bounding Box
-    if not DISABLE_OPTIMIZED_BOUNDING_BOX:
+    if not cfg.DISABLE_OPTIMIZED_BOUNDING_BOX:
         bounds = shapely.bounds(geometry)
         bits.frombytes(double_to_bytes(bounds[0]))
         bits.frombytes(double_to_bytes(bounds[1]))
