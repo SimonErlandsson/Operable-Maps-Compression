@@ -139,3 +139,4 @@ dmypy.json
 .pyre/
 data/intersection/world.json
 data/intersection/sweden-places-a.json
+data/intersection/__MACOSX/._sweden-places-a.json
