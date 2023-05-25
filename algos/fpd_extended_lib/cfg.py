@@ -19,7 +19,7 @@ RING_CHK_CNT_SIZE = 30
 MAX_NUM_DELTAS = 17  # Max number of deltas in a chunk before split
 D_CNT_SIZE = required_bits(MAX_NUM_DELTAS + 1)
 
-BASELINE_ON = False
+BASELINE_ON = True
 # Disable optimized FPDE operations
 DISABLE_OPTIMIZED_UNPACKING = False
 DELTA_ENCODE_CHUNK_BBOXES = True
