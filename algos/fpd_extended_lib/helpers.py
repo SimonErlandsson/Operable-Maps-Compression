@@ -18,15 +18,20 @@ def get_chunks(bin_in, include_next_start=True, verbose=False):
     # Verbose can be set to True for stats.
     """
     assert(not(cfg.USE_ENTROPY or cfg.COMPRESS_CHUNK))
-    # {'Poly Ring Cnt Max': 0, 'Ring Chk Cnt Max': 0, 'Chk Deltas Cnt Max': 0}, {'Global Header Bitsize': 0, 'Poly Ring Cnt Bitsize': 0, 'Ring Chk Cnt Bitsize': 0, 'Chk Deltas Cnt Bitsize': 0, 'Full Coordinates Bitsize': 0, 'Deltas Bitsize': 0}
-    stats = [defaultdict(int), defaultdict(int)]
+    stats = [{'Poly Ring Cnt Max': 0, 'Ring Chk Cnt Max': 0, 'Chk Deltas Cnt Max': 0}, {'Global Header Bitsize': 0, 'Bounding Box Bitsize': 0, 'Intersection Bitsize': 0, 'Poly Ring Cnt Bitsize': 0, 'Ring Chk Cnt Bitsize': 0, 'Chk Deltas Cnt Bitsize': 0, 'Full Coordinates Bitsize': 0, 'Deltas Bitsize': 0}]
     chunks = []
     cfg.offset = 0
     bin = bitarray(endian='big')
     bin.frombytes(bin_in)
 
     delta_size, type = decode_header(bin)
-    stats[1]['Global Header Bitsize'] = cfg.offset
+    stats[1]['Global Header Bitsize'] = 3 * 8 if cfg.USE_ENTROPY else 2 * 8
+    if not DISABLE_OPTIMIZED_BOUNDING_BOX:
+        stats[1]['Bounding Box Bitsize'] = 4 * FLOAT_SIZE
+    
+    if not DISABLE_OPTIMIZED_INTERSECTION:
+        stats[1]['Intersection Bitsize'] = cfg.offset - stats[1]['Global Header Bitsize'] - stats[1]['Bounding Box Bitsize']
+    
     # Type specific variables
     is_linestring = type == GT.LINESTRING
     is_multipolygon = type == GT.MULTIPOLYGON
