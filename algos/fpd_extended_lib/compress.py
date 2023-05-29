@@ -92,7 +92,7 @@ def fp_delta_encoding(geometry, d_size, deltas):
         if not is_linestring and rem_points_ring == 1:  # Is the whole ring processed? We skip last coordinate
             # Store number of chunks used for the ring
             rem_points_ring = 0
-            bits[num_chks_ring_idx:num_chks_ring_idx + RING_CHK_CNT_SIZE] = uint_to_ba(num_chks_ring, RING_CHK_CNT_SIZE)
+            bits[num_chks_ring_idx:num_chks_ring_idx + cfg.RING_CHK_CNT_SIZE] = uint_to_ba(num_chks_ring, cfg.RING_CHK_CNT_SIZE)
             num_chks_ring = 0
             intersection_add_point(*intersection_first_coord_ring)
             continue  # Skip last coordinate
@@ -108,7 +108,7 @@ def fp_delta_encoding(geometry, d_size, deltas):
                 if cfg.COMPRESS_CHUNK: # Compress previous chunk
                     bits, chk_dt_bitsize = compress_chunk(bits, chk_hdr_offset, chk_dt_bitsize)
                 if STORE_DT_BITSIZE:
-                    bits[chk_hdr_offset + cfg.D_CNT_SIZE:chk_hdr_offset + cfg.D_CNT_SIZE + D_BITSIZE_SIZE] = int_to_ba(chk_dt_cnt * d_size * 2 - chk_dt_bitsize, D_BITSIZE_SIZE)
+                    bits[chk_hdr_offset + cfg.D_CNT_SIZE:chk_hdr_offset + cfg.D_CNT_SIZE + cfg.D_BITSIZE_SIZE] = int_to_ba(chk_dt_cnt * d_size * 2 - chk_dt_bitsize, cfg.D_BITSIZE_SIZE)
 
             ###### ---- INITIALIZE NEW CHUNK ----- ######
             chk_dt_cnt, chk_dt_bitsize = 0, 0
@@ -122,11 +122,11 @@ def fp_delta_encoding(geometry, d_size, deltas):
                     # Check if we ran out of rings -> fetch rings of NEXT POLYGON
                     if is_multipolygon and len(ring_buffer) == 0:
                         ring_buffer = poly_buffer.popleft()
-                        bits.extend(uint_to_ba(len(ring_buffer), POLY_RING_CNT_SIZE))  # Append 'nbr of rings in poly'
+                        bits.extend(uint_to_ba(len(ring_buffer), cfg.POLY_RING_CNT_SIZE))  # Append 'nbr of rings in poly'
                     # Set 'remaining points' to cnt in new ring
                     rem_points_ring = ring_buffer.popleft()
                     num_chks_ring_idx = len(bits)
-                    bits.extend(uint_to_ba(0, RING_CHK_CNT_SIZE))  # Reserve space for number of chunks for current ring
+                    bits.extend(uint_to_ba(0, cfg.RING_CHK_CNT_SIZE))  # Reserve space for number of chunks for current ring
                     num_chks_ring = 1
                     intersection_first_coord_ring = (x, y)
                 else:
@@ -144,7 +144,7 @@ def fp_delta_encoding(geometry, d_size, deltas):
             bits.extend(uint_to_ba(0, cfg.D_CNT_SIZE)) # Reserve space for 'chk_dt_cnt'
             if STORE_DT_BITSIZE:
                 # Size of chunk is needed when variable-length compression is used
-                bits.extend(uint_to_ba(0, D_BITSIZE_SIZE)) # Reserve space for bit size of deltas
+                bits.extend(uint_to_ba(0, cfg.D_BITSIZE_SIZE)) # Reserve space for bit size of deltas
 
             # Add full coordinates
             bits.frombytes(double_to_bytes(x))
@@ -166,7 +166,7 @@ def fp_delta_encoding(geometry, d_size, deltas):
     bits[chk_hdr_offset:chk_hdr_offset + cfg.D_CNT_SIZE] = uint_to_ba(chk_dt_cnt, cfg.D_CNT_SIZE)
     if STORE_DT_BITSIZE:
         # Store the gain from compression/entropy coding
-        bits[chk_hdr_offset + cfg.D_CNT_SIZE:chk_hdr_offset + cfg.D_CNT_SIZE + D_BITSIZE_SIZE] = int_to_ba(chk_dt_cnt * d_size * 2 - chk_dt_bitsize, D_BITSIZE_SIZE)
+        bits[chk_hdr_offset + cfg.D_CNT_SIZE:chk_hdr_offset + cfg.D_CNT_SIZE + cfg.D_BITSIZE_SIZE] = int_to_ba(chk_dt_cnt * d_size * 2 - chk_dt_bitsize, cfg.D_BITSIZE_SIZE)
    
     bits = intersection_append_header(bits)
     
@@ -176,7 +176,7 @@ def fp_delta_encoding(geometry, d_size, deltas):
 
 def calculate_delta_size(geometry=None, coords=None, return_deltas=False):
     deltas = [[], []]
-    RESET_POINT_SIZE = FLOAT_SIZE * 2 + cfg.D_CNT_SIZE
+    RESET_POINT_SIZE = cfg.FLOAT_SIZE * 2 + cfg.D_CNT_SIZE
     if geometry != None:
         coords = shapely.get_coordinates(geometry)
     prev = coords[0]

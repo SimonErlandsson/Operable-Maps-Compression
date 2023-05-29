@@ -8,7 +8,7 @@ import math
 import numpy as np
 from shapely import GeometryType as GT
 from bitarray import bitarray, util, bits2bytes
-from algos.fpd_extended_lib.cfg import *
+import algos.fpd_extended_lib.cfg as cfg
 from algos.fpd_extended_lib.low_level import *
 
 chunk_bboxes = []
@@ -45,7 +45,7 @@ def intersection_append_header(bits):
         return bits
         
     left = bits[0:chunk_bounds_offset]
-    if DELTA_ENCODE_CHUNK_BBOXES:
+    if cfg.DELTA_ENCODE_CHUNK_BBOXES:
         from algos.fpd_extended_lib.compress import append_delta_pair, deltas_fit_in_bits, get_zz_encoded_delta, calculate_delta_size
         coords = [[bbox[2 * i], bbox[2 * i + 1]] for i in range(2) for bbox in chunk_bboxes]
         d_size = calculate_delta_size(coords=coords)[0]
@@ -97,15 +97,15 @@ def intersection_append_header(bits):
 def intersection_skip_header(bin):
     if cfg.DISABLE_OPTIMIZED_INTERSECTION:
         return
-    if DELTA_ENCODE_CHUNK_BBOXES:
+    if cfg.DELTA_ENCODE_CHUNK_BBOXES:
         cfg.offset += struct.unpack_from('!I', bin, offset=cfg.offset//8)[0]
     else:
         chk_cnt = struct.unpack_from('!I', bin, offset=cfg.offset//8)[0]
-        cfg.offset += INTERSECTION_CHK_CNT_SIZE + 4 * FLOAT_SIZE * chk_cnt
+        cfg.offset += INTERSECTION_CHK_CNT_SIZE + 4 * cfg.FLOAT_SIZE * chk_cnt
 
 def get_chunk_bounds(bin_in):
     pre_header_len = 3 * 8 if cfg.USE_ENTROPY else 2 * 8
-    pre_header_len += (4 * FLOAT_SIZE if not cfg.DISABLE_OPTIMIZED_BOUNDING_BOX else 0) # Skip normal header
+    pre_header_len += (4 * cfg.FLOAT_SIZE if not cfg.DISABLE_OPTIMIZED_BOUNDING_BOX else 0) # Skip normal header
     cfg.offset = pre_header_len 
     total_len = struct.unpack_from('!I', bin_in, offset=cfg.offset//8)[0]
     cfg.offset += INTERSECTION_CHK_CNT_SIZE
@@ -114,7 +114,7 @@ def get_chunk_bounds(bin_in):
     start_offset = cfg.offset
     bounds = []
 
-    if DELTA_ENCODE_CHUNK_BBOXES:
+    if cfg.DELTA_ENCODE_CHUNK_BBOXES:
         def add_coord(x, y, prev):
             if prev == None:
                 return (x,  y)

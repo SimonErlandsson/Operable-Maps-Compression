@@ -9,7 +9,6 @@ from bitarray import bitarray, util, decodetree
 from shapely.geometry import shape
 from collections import defaultdict
 from algos.fpd_extended_lib.low_level import *
-from algos.fpd_extended_lib.cfg import *
 import algos.fpd_extended_lib.cfg as cfg
 
 ENTROPY_BASE_PATH = "data/entropy_models"
@@ -27,21 +26,21 @@ def uint_to_ba(x, length):
     return uint_to_ba_optimized(x, length)
     
 def encode(msg, delta_len):
-    if cfg.ENTROPY_METHOD == EM.HUFFMAN:
+    if cfg.ENTROPY_METHOD == cfg.EM.HUFFMAN:
         if delta_len in huffman_codecs:
             return huffman_encode(msg, delta_len)
         else:
             return msg, len(msg)
-    elif cfg.ENTROPY_METHOD == EM.GOLOMB:
+    elif cfg.ENTROPY_METHOD == cfg.EM.GOLOMB:
         return golomb_encode(msg)
         
 def decode(msg, delta_len):
-    if cfg.ENTROPY_METHOD == EM.HUFFMAN:
+    if cfg.ENTROPY_METHOD == cfg.EM.HUFFMAN:
         if delta_len in huffman_decodecs:
             return huffman_decode(msg, delta_len)
         else:
             return msg[:delta_len], delta_len
-    elif cfg.ENTROPY_METHOD == EM.GOLOMB:
+    elif cfg.ENTROPY_METHOD == cfg.EM.GOLOMB:
         return golomb_decode(msg, delta_len)            
 
 #Huffman Encoding
@@ -102,14 +101,14 @@ def get_entropy_metadata(deltas, delta_size):
         Returns data appended to header and settings used for compression/decomp.
     '''
     deltas = [d for d in deltas if (d == 0 or math.log2(d) <= delta_size)]
-    if cfg.ENTROPY_METHOD == EM.NONE:
-         return (EM.NONE, False, 0)
-    if cfg.ENTROPY_METHOD == EM.AUTO:
+    if cfg.ENTROPY_METHOD == cfg.EM.NONE:
+         return (cfg.EM.NONE, False, 0)
+    if cfg.ENTROPY_METHOD == cfg.EM.AUTO:
         return get_best_strategy(deltas, delta_size)
-    if cfg.ENTROPY_METHOD == EM.GOLOMB:
-        return (EM.GOLOMB, True, k_est(deltas))
-    if cfg.ENTROPY_METHOD == EM.HUFFMAN:
-        return (EM.HUFFMAN, True, 255)
+    if cfg.ENTROPY_METHOD == cfg.EM.GOLOMB:
+        return (cfg.EM.GOLOMB, True, k_est(deltas))
+    if cfg.ENTROPY_METHOD == cfg.EM.HUFFMAN:
+        return (cfg.EM.HUFFMAN, True, 255)
     
 def get_best_strategy(deltas, delta_size):
     '''
@@ -131,24 +130,24 @@ def get_best_strategy(deltas, delta_size):
     if delta_size not in huffman_codecs:
         huffman_tot_size = 99999999999
     if golomb_tot_size < normal_tot_size and golomb_tot_size < huffman_tot_size:
-        return (EM.GOLOMB, True, golomb_estimated)
+        return (cfg.EM.GOLOMB, True, golomb_estimated)
     elif huffman_tot_size < normal_tot_size:
-        return (EM.HUFFMAN, True, 255)
+        return (cfg.EM.HUFFMAN, True, 255)
     else:
-        return (EM.NONE, False, 0)
+        return (cfg.EM.NONE, False, 0)
 
 def decode_entropy_param(value, delta_size):
     if value == 0:
         cfg.USE_ENTROPY = False
-        cfg.ENTROPY_METHOD = EM.NONE
+        cfg.ENTROPY_METHOD = cfg.EM.NONE
         cfg.ENTROPY_PARAM = 0
     elif value == 255:
         cfg.USE_ENTROPY = True
-        cfg.ENTROPY_METHOD = EM.HUFFMAN
+        cfg.ENTROPY_METHOD = cfg.EM.HUFFMAN
         cfg.ENTROPY_PARAM = delta_size
     else:
         cfg.USE_ENTROPY = True
-        cfg.ENTROPY_METHOD = EM.GOLOMB
+        cfg.ENTROPY_METHOD = cfg.EM.GOLOMB
         cfg.ENTROPY_PARAM = value
 
 def train_arith_model(model, dataset, iter = None):
@@ -178,20 +177,20 @@ def train_arith_model(model, dataset, iter = None):
 
 # Chunk based compression
 def compress_chunk(bits, chk_hdr_offset, delta_bytes_size):
-    chk_dt_offset = chk_hdr_offset + D_CNT_SIZE + D_BITSIZE_SIZE + 2 * FLOAT_SIZE
+    chk_dt_offset = chk_hdr_offset + cfg.D_CNT_SIZE + cfg.D_BITSIZE_SIZE + 2 * cfg.FLOAT_SIZE
     before_bits = bits[:chk_dt_offset]
     coords_bits = bits[chk_dt_offset:chk_dt_offset + delta_bytes_size]
     comp_dt_bits = bitarray()
 
-    if cfg.CHUNK_COMP_METHOD == CM.ZLIB:
+    if cfg.CHUNK_COMP_METHOD == cfg.CM.ZLIB:
         comp_dt_bytes = zlib.compress(coords_bits.tobytes())
         comp_dt_bits.frombytes(comp_dt_bytes)
 
-    elif cfg.CHUNK_COMP_METHOD == CM.GZIP:
+    elif cfg.CHUNK_COMP_METHOD == cfg.CM.GZIP:
         comp_dt_bytes = gzip.compress(coords_bits.tobytes())
         comp_dt_bits.frombytes(comp_dt_bytes)
 
-    elif cfg.CHUNK_COMP_METHOD == CM.ARITHMETIC:
+    elif cfg.CHUNK_COMP_METHOD == cfg.CM.ARITHMETIC:
         comp_dt_bits = bitarray()
         comp_dt_bits.extend(cfg.ARITHMETIC_ENCODER.compress([int(x) for x in [*coords_bits.to01()]]))
         
@@ -209,22 +208,22 @@ def decompress_chunk(bits, chk_dt_offset, chk_dt_bitsize):
     after_bits = bits[chk_dt_offset + chk_dt_bitsize:]
     decompressed_bits = bitarray()
 
-    if cfg.CHUNK_COMP_METHOD == CM.ZLIB:
+    if cfg.CHUNK_COMP_METHOD == cfg.CM.ZLIB:
         coords_bits = zlib.decompress(comp_dt_bits.tobytes())
         decompressed_bits.frombytes(coords_bits)
 
-    elif cfg.CHUNK_COMP_METHOD == CM.GZIP:
+    elif cfg.CHUNK_COMP_METHOD == cfg.CM.GZIP:
         coords_bits = gzip.decompress(comp_dt_bits.tobytes())
         decompressed_bits.frombytes(coords_bits)
 
-    elif cfg.CHUNK_COMP_METHOD == CM.ARITHMETIC:
+    elif cfg.CHUNK_COMP_METHOD == cfg.CM.ARITHMETIC:
         indata = [int(x) for x in [*comp_dt_bits.to01()]]
         decompressed_bits.extend(cfg.ARITHMETIC_ENCODER.decompress(indata, len(indata)))
     else:
         decompressed_bits = comp_dt_bits
     
-    chk_header_offset = chk_dt_offset - 2 * FLOAT_SIZE - D_BITSIZE_SIZE - D_CNT_SIZE
-    before_bits[chk_header_offset + D_CNT_SIZE:chk_header_offset + D_CNT_SIZE + D_BITSIZE_SIZE] = int_to_ba(0, D_BITSIZE_SIZE) 
+    chk_header_offset = chk_dt_offset - 2 * cfg.FLOAT_SIZE - cfg.D_BITSIZE_SIZE - cfg.D_CNT_SIZE
+    before_bits[chk_header_offset + cfg.D_CNT_SIZE:chk_header_offset + cfg.D_CNT_SIZE + cfg.D_BITSIZE_SIZE] = int_to_ba(0, cfg.D_BITSIZE_SIZE) 
 
     before_bits += decompressed_bits
     before_bits += after_bits

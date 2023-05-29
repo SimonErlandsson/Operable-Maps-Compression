@@ -1,12 +1,11 @@
 from bitarray import bitarray, bits2bytes, util
 from var_float import VarFloat
-from algos.fpd_extended_lib.cfg import *
 import algos.fpd_extended_lib.cfg as cfg
 import struct
 from algos.fpd_extended_lib.entropy_coder import decode
 
 
-var_float = VarFloat(EXPONENT, FLOAT_SIZE)
+var_float = VarFloat(cfg.EXPONENT, cfg.FLOAT_SIZE)
 
 def zz_encode(num):
     return -2 * num - 1 if num < 0 else 2 * num
@@ -32,17 +31,17 @@ def ba2int_optimized(__a):
 
 # Decode
 def bin_to_double(bin):
-    if USE_DEFAULT_DOUBLE:
+    if cfg.USE_DEFAULT_DOUBLE:
         return struct.unpack('!d', bin)[0]
-    elif USE_FPINT:
+    elif cfg.USE_FPINT:
         return long_as_double(ba2int_optimized(bin))
     else:
         return var_float.bin_to_float(bin)
     
 def long_as_double(long):
-    if USE_DEFAULT_DOUBLE:
+    if cfg.USE_DEFAULT_DOUBLE:
         return struct.unpack('!d', struct.pack('!q', long))[0]
-    elif USE_FPINT:
+    elif cfg.USE_FPINT:
         return fpint_as_double(long)
     else:
         return var_float.bin_to_float(var_float.long_to_bits(long))
@@ -67,9 +66,9 @@ def bytes_to_decoded_coord_pair(bin, prev_coord, input_size=64):
     return long_as_double(d1), long_as_double(d2), (d1, d2)
 
 def bytes_to_double(bin):
-    bin = bin[cfg.offset:cfg.offset + FLOAT_SIZE]
+    bin = bin[cfg.offset:cfg.offset + cfg.FLOAT_SIZE]
     val = bin_to_double(bin)
-    cfg.offset += FLOAT_SIZE
+    cfg.offset += cfg.FLOAT_SIZE
     return val
 
 def bytes_to_uint(bin, len):
@@ -84,17 +83,17 @@ def bytes_to_int(bin, len):
 
 # Encode
 def double_to_bytes(x):
-    if USE_DEFAULT_DOUBLE:
+    if cfg.USE_DEFAULT_DOUBLE:
         return struct.pack("!d", x)
-    elif USE_FPINT:
+    elif cfg.USE_FPINT:
         return uint_to_ba(double_as_long(x), 32)
     else:
         return var_float.float_to_bin(x)
     
 def double_as_long(num):
-    if USE_DEFAULT_DOUBLE:
+    if cfg.USE_DEFAULT_DOUBLE:
         return struct.unpack('!q', struct.pack('!d', num))[0]
-    elif USE_FPINT:
+    elif cfg.USE_FPINT:
         return double_as_fpint(num)
     else:
         return var_float.bits_to_long(var_float.float_to_bin(num))

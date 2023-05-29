@@ -6,7 +6,7 @@ import numpy as np
 from shapely import GeometryType as GT
 import bisect
 from bitarray import bitarray, util
-from algos.fpd_extended_lib.cfg import *
+import algos.fpd_extended_lib.cfg as cfg
 from algos.fpd_extended_lib.decompress import *
 from algos.fpd_extended_lib.helpers import decompress_chunk
 
@@ -40,23 +40,23 @@ def vertices(self, bin_in):
     chunks_in_ring = 0
     rings_left = 0
     cfg.binary_length = len(bin)
-    while (cfg.offset + EOF_THRESHOLD <= cfg.binary_length):
+    while (cfg.offset + cfg.EOF_THRESHOLD <= cfg.binary_length):
         if is_multipolygon and rings_left == 0:
-            rings_left = bytes_to_uint(bin, POLY_RING_CNT_SIZE)
+            rings_left = bytes_to_uint(bin, cfg.POLY_RING_CNT_SIZE)
         if not is_linestring and chunks_in_ring_left == 0:
-            chunks_in_ring_left = bytes_to_uint(bin, RING_CHK_CNT_SIZE)
+            chunks_in_ring_left = bytes_to_uint(bin, cfg.RING_CHK_CNT_SIZE)
             chunks_in_ring = chunks_in_ring_left
 
-        deltas_in_chunk = bytes_to_uint(bin, D_CNT_SIZE)
+        deltas_in_chunk = bytes_to_uint(bin, cfg.D_CNT_SIZE)
 
         if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
-            delta_bytes_size = deltas_in_chunk * delta_size * 2 - bytes_to_int(bin, D_BITSIZE_SIZE)
+            delta_bytes_size = deltas_in_chunk * delta_size * 2 - bytes_to_int(bin, cfg.D_BITSIZE_SIZE)
 
         # Extract reset point
         x = bytes_to_double(bin)
         y = bytes_to_double(bin)
 
-        if COMPRESS_CHUNK:
+        if cfg.COMPRESS_CHUNK:
             chk_deltas_offset = cfg.offset
             bin, coord_bit_len = decompress_chunk(bin, chk_deltas_offset, delta_bytes_size) 
    
@@ -68,7 +68,7 @@ def vertices(self, bin_in):
             x = bytes_to_decoded_coord(bin, x, delta_size)
             y = bytes_to_decoded_coord(bin, y, delta_size)
             coords.append([x, y])
-        if COMPRESS_CHUNK:
+        if cfg.COMPRESS_CHUNK:
             cfg.offset = chk_deltas_offset + coord_bit_len
 
         chunks_in_ring_left -= 1
@@ -101,7 +101,7 @@ def bounding_box(self, bin):
         res = bitarray()
         res.frombytes(bin)
         init_offset = 2 * 8 if not cfg.USE_ENTROPY else 3 * 8
-        bounds = [bin_to_double(res[init_offset + FLOAT_SIZE * i: init_offset + FLOAT_SIZE * (i + 1)]) for i in range(4)]
+        bounds = [bin_to_double(res[init_offset + cfg.FLOAT_SIZE * i: init_offset + cfg.FLOAT_SIZE * (i + 1)]) for i in range(4)]
     else:
         _, geometry = self.decompress(bin)
         bounds = shapely.bounds(geometry)

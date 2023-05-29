@@ -5,8 +5,6 @@ from bitarray import bitarray
 from algos.fpd_extended_lib.helpers import *
 from algos.fpd_extended_lib.cfg import *
 import algos.fpd_extended_lib.cfg as cfg
-
-import algos.fpd_extended_lib.cfg
 from algos.fpd_extended_lib.low_level import *
 
 # Not implemented to work with COMPRESS_CHUNK==TRUE or USE_ENTROPY==True

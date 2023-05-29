@@ -4,7 +4,7 @@ import zlib
 import gzip
 from bitarray import bitarray, util
 from shapely import GeometryType as GT
-from algos.fpd_extended_lib.cfg import *
+import algos.fpd_extended_lib.cfg as cfg
 from algos.fpd_extended_lib.low_level import *
 from algos.fpd_extended_lib.decompress import *
 
@@ -26,10 +26,10 @@ def get_chunks(bin_in, include_next_start=True, verbose=False):
 
     delta_size, type = decode_header(bin)
     stats[1]['Global Header Bitsize'] = 3 * 8 if cfg.USE_ENTROPY else 2 * 8
-    if not DISABLE_OPTIMIZED_BOUNDING_BOX:
-        stats[1]['Bounding Box Bitsize'] = 4 * FLOAT_SIZE
+    if not cfg.DISABLE_OPTIMIZED_BOUNDING_BOX:
+        stats[1]['Bounding Box Bitsize'] = 4 * cfg.FLOAT_SIZE
     
-    if not DISABLE_OPTIMIZED_INTERSECTION:
+    if not cfg.DISABLE_OPTIMIZED_INTERSECTION:
         stats[1]['Intersection Bitsize'] = cfg.offset - stats[1]['Global Header Bitsize'] - stats[1]['Bounding Box Bitsize']
     
     # Type specific variables
@@ -42,15 +42,15 @@ def get_chunks(bin_in, include_next_start=True, verbose=False):
 
     is_last_ring_chunk = []
     bin_len = len(bin)
-    while (cfg.offset + EOF_THRESHOLD <= bin_len):
+    while (cfg.offset + cfg.EOF_THRESHOLD <= bin_len):
         if is_multipolygon and rings_left == 0:
-            rings_left = bytes_to_uint(bin, POLY_RING_CNT_SIZE)
-            stats[1]['Poly Ring Cnt Bitsize'] += POLY_RING_CNT_SIZE
+            rings_left = bytes_to_uint(bin, cfg.POLY_RING_CNT_SIZE)
+            stats[1]['Poly Ring Cnt Bitsize'] += cfg.POLY_RING_CNT_SIZE
             stats[0]['Poly Ring Cnt Max'] = max(rings_left, stats[0]['Poly Ring Cnt Max'])
         if not is_linestring and chunks_in_ring_left == 0:
-            chunks_in_ring_left = bytes_to_uint(bin, RING_CHK_CNT_SIZE)
+            chunks_in_ring_left = bytes_to_uint(bin, cfg.RING_CHK_CNT_SIZE)
             chunks_in_ring = chunks_in_ring_left
-            stats[1]['Ring Chk Cnt Bitsize'] += RING_CHK_CNT_SIZE
+            stats[1]['Ring Chk Cnt Bitsize'] += cfg.RING_CHK_CNT_SIZE
             stats[0]['Ring Chk Cnt Max'] = max(chunks_in_ring, stats[0]['Ring Chk Cnt Max'])
 
         deltas_in_chunk = bytes_to_uint(bin, cfg.D_CNT_SIZE)
@@ -60,7 +60,7 @@ def get_chunks(bin_in, include_next_start=True, verbose=False):
         # Extract reset point
         x = bytes_to_double(bin)
         y = bytes_to_double(bin)
-        stats[1]['Full Coordinates Bitsize'] += 2 * FLOAT_SIZE
+        stats[1]['Full Coordinates Bitsize'] += 2 * cfg.FLOAT_SIZE
         if chunks_in_ring_left == chunks_in_ring:
             x_ring, y_ring = (x, y)
         elif include_next_start:
@@ -132,9 +132,9 @@ def random_access(bin_in, idx, cache, offset_cache=None, get_chunk=False):
             offset_cache[cur_idx] = delta_size, type, cur_idx, chunks_in_ring_left, rings_left, cfg.offset, ring_start_offset
 
         if is_multipolygon and rings_left == 0:
-            rings_left = bytes_to_uint(bin, POLY_RING_CNT_SIZE)
+            rings_left = bytes_to_uint(bin, cfg.POLY_RING_CNT_SIZE)
         if not is_linestring and chunks_in_ring_left == 0:
-            chunks_in_ring_left = bytes_to_uint(bin, RING_CHK_CNT_SIZE)
+            chunks_in_ring_left = bytes_to_uint(bin, cfg.RING_CHK_CNT_SIZE)
             ring_start_offset = cfg.offset
         deltas_in_chunk_offset = cfg.offset
         deltas_in_chunk = bytes_to_uint(bin, cfg.D_CNT_SIZE)
@@ -142,7 +142,7 @@ def random_access(bin_in, idx, cache, offset_cache=None, get_chunk=False):
 
         delta_bytes_size = deltas_in_chunk * delta_size * 2
         if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
-            delta_bytes_size -= bytes_to_int(bin, D_BITSIZE_SIZE)
+            delta_bytes_size -= bytes_to_int(bin, cfg.D_BITSIZE_SIZE)
 
         if get_chunk and cur_idx == idx:
             # Looking for whole chunk, found it
@@ -154,7 +154,7 @@ def random_access(bin_in, idx, cache, offset_cache=None, get_chunk=False):
                 next_chk_offset = ring_start_offset
             else:
                 # Append next chunk start
-                next_chk_offset = cfg.offset + FLOAT_SIZE * 2 + delta_bytes_size
+                next_chk_offset = cfg.offset + cfg.FLOAT_SIZE * 2 + delta_bytes_size
             # Avoid reading if EOF
             if next_chk_offset + cfg.EOF_THRESHOLD <= cfg.binary_length:
                 next_vert = get_upcoming_vertex(bin, next_chk_offset)
@@ -169,7 +169,7 @@ def random_access(bin_in, idx, cache, offset_cache=None, get_chunk=False):
 
         # Jump to next chunk
         cur_idx += 1 + (deltas_in_chunk if not get_chunk else 0)
-        cfg.offset += FLOAT_SIZE * 2 + delta_bytes_size
+        cfg.offset += cfg.FLOAT_SIZE * 2 + delta_bytes_size
         chunks_in_ring_left -= 1
         if (chunks_in_ring_left == 0):
             rings_left -= 1
@@ -178,7 +178,7 @@ def random_access(bin_in, idx, cache, offset_cache=None, get_chunk=False):
 def get_upcoming_vertex(bin, chk_offset):
     cfg.offset = chk_offset + cfg.D_CNT_SIZE
     if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
-        cfg.offset += D_BITSIZE_SIZE
+        cfg.offset += cfg.D_BITSIZE_SIZE
    
     return (bytes_to_double(bin), bytes_to_double(bin))
 
@@ -195,7 +195,7 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
     cfg.offset = chk_offset
     deltas_in_chunk = bytes_to_uint(bin, cfg.D_CNT_SIZE)
     if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
-        delta_bytes_size = deltas_in_chunk * delta_size * 2 - bytes_to_int(bin, D_BITSIZE_SIZE)
+        delta_bytes_size = deltas_in_chunk * delta_size * 2 - bytes_to_int(bin, cfg.D_BITSIZE_SIZE)
     
     if idx == None:
         idx = deltas_in_chunk
