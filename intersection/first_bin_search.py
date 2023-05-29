@@ -4,6 +4,14 @@ import shapely
 import matplotlib.pyplot as plt
 import math
 
+from intersection.plotting import create_canvas, plot_common_bbox, plot_coordinates, plot_geometry, plot_geometry_bbox, plot_intersecting_points
+
+'''
+
+    NOTE: This method was abandoned for reasons outlined in the report.
+
+'''
+
 def get_bounds_intersect(bound_min1, bound_min2, bound_max1, bound_max2):
     if bound_min1 <= bound_min2 and bound_max1 <= bound_max2 and bound_max1 >= bound_min2:
         return (bound_min2, bound_max1)
@@ -58,7 +66,7 @@ def create_linesegments(in_bounds_idxs, coords):
         if i == 0:
             coords_linestrings.add(shapely.LineString([coords[0], coords[1]]))
         elif i == len(coords) - 1:
-            coords_linestrings.add(shapely.LineString([coords[len(coords) - 2], coords[len(coords) - 1]]))
+            coords_linestrings.add(shapely.LineString([coords[len(coords) - 1], coords[0]]))
         else:
             coords_linestrings.add(shapely.LineString([coords[i - 1], coords[i]]))
             coords_linestrings.add(shapely.LineString([coords[i], coords[i + 1]]))
@@ -89,17 +97,29 @@ def binary_intersection(geom1, geom2):
         in_bounds_idxs1 = set(argsorted_xs1[xs1_min_idx:xs1_max_idx + 1]).intersection(set(argsorted_ys1[ys1_min_idx:ys1_max_idx + 1]))
         in_bounds_idxs2 = set(argsorted_xs2[xs2_min_idx:xs2_max_idx + 1]).intersection(set(argsorted_ys2[ys2_min_idx:ys2_max_idx + 1]))
 
-        coords1_linestrings = create_linesegments(in_bounds_idxs1, coords1)  
-        coords2_linestrings = create_linesegments(in_bounds_idxs2, coords2)  
+        ## Add left and right segs
+        for i in in_bounds_idxs1.copy():
+            left = (i - 1) % len(coords1)
+            right = (i + 1) % len(coords1)
+            in_bounds_idxs1.add(left)
+            in_bounds_idxs1.add(right)
+        for i in in_bounds_idxs2.copy():
+            left = (i - 1) % len(coords2)
+            right = (i + 1) % len(coords2)
+            in_bounds_idxs2.add(left)
+            in_bounds_idxs2.add(right)
 
-        for i in in_bounds_idxs2:
-            if i == 0:
-                coords2_linestrings.add(shapely.LineString([coords2[0], coords2[1]]))
-            elif i == len(coords2) - 1:
-                coords2_linestrings.add(shapely.LineString([coords2[len(coords2) - 2], coords2[len(coords2) - 1]]))
-            else:
-                coords2_linestrings.add(shapely.LineString([coords2[i - 1], coords2[i]]))
-                coords2_linestrings.add(shapely.LineString([coords2[i], coords2[i + 1]]))
+        coords1_linestrings = create_linesegments(in_bounds_idxs1, coords1)  
+        coords2_linestrings = create_linesegments(in_bounds_idxs2, coords2)
+
+        # for i in in_bounds_idxs2:
+        #     if i == 0:
+        #         coords2_linestrings.add(shapely.LineString([coords2[0], coords2[1]]))
+        #     elif i == len(coords2) - 1:
+        #         coords2_linestrings.add(shapely.LineString([coords2[len(coords2) - 2], coords2[len(coords2) - 1]]))
+        #     else:
+        #         coords2_linestrings.add(shapely.LineString([coords2[i - 1], coords2[i]]))
+        #         coords2_linestrings.add(shapely.LineString([coords2[i], coords2[i + 1]]))
         
         intersection_points_x = []
         intersection_points_y = []
@@ -109,6 +129,39 @@ def binary_intersection(geom1, geom2):
                     int_point = i.intersection(j)
                     intersection_points_x.append(int_point.x)
                     intersection_points_y.append(int_point.y)
+
+
+        # points_in_bounds_idxs1 = [coords1[i] for i in in_bounds_idxs1]
+        # points_in_bounds_idxs2 = [coords2[i] for i in in_bounds_idxs2]
+        # points_not_in_bounds_idxs1 = [c for idx, c in enumerate(coords1) if idx not in in_bounds_idxs1]
+        # points_not_in_bounds_idxs2 = [c for idx, c in enumerate(coords2) if idx not in in_bounds_idxs2]
+        # create_canvas(no_frame=True, zoom=1.25)
+        # for s, g in enumerate([geom1, geom2]):
+        #     #plot_chunks_bounds(bins[s], include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chunks_not_loaded, solid=False, alpha=0.3, fill_alpha=0.05, color='black', point_color='cyan', point_size=9)
+        #     #plot_chunks_bounds(bins[s], include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chk_idxs[s], alpha=1.0, color='orange', point_color='red', point_size=14)
+        #     plot_geometry(g, fill_alpha=0.1, hatch=('\\' if s == 1 else '/'), color=('blue' if s == 1 else 'green'))
+        #     plot_geometry_bbox(g, solid=False, color=('blue' if s == 1 else 'green'), linewidth=1)
+        #     #For excp cases: plot_coordinates(g, size=40, color=('blue' if s == 1 else 'green'), zorder=100)
+        # plot_common_bbox([geom1, geom2], color='red', linewidth=1, zorder=90)
+        # from shapely import intersection as s_inter
+        # inter_shape = s_inter(geom1, geom2)
+        # intersecting_points = [[intersection_points_x[i], intersection_points_y[i]] for i in range(len(intersection_points_x))]
+        # plot_geometry(inter_shape, fill_alpha=0.3, hatch='X', color='purple')
+
+        # inter_coords = shapely.get_coordinates(inter_shape)
+        # inter_shape_added = list(filter(lambda x: x not in intersecting_points, list(map(lambda y: list(y), inter_coords))))
+        # points_in_bounds_idxs1 = list(filter(lambda x: x not in inter_coords, points_in_bounds_idxs1))
+        # points_in_bounds_idxs2 = list(filter(lambda x: x not in inter_coords, points_in_bounds_idxs2))
+
+        # plot_intersecting_points(inter_shape_added[:-3], color='red', zorder=100, size=50)
+        
+        # plot_intersecting_points(inter_shape_added, color='lime', zorder=100, size=30)
+        # plot_intersecting_points(points_in_bounds_idxs1, color='red', zorder=100, size=22)
+        # plot_intersecting_points(points_in_bounds_idxs2, color='red', zorder=100, size=22)
+        # plot_intersecting_points(points_not_in_bounds_idxs1, color='cyan', zorder=100, size=22)
+        # plot_intersecting_points(points_not_in_bounds_idxs2, color='cyan', zorder=100, size=22)
+        # plot_intersecting_points(intersecting_points, color='black', zorder=100, size=30)
+        #plt.show()
 
         SHOW_COORDINATES = False
         SHOW_GEOMETRIES = False

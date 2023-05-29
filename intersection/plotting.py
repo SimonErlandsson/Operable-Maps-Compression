@@ -82,10 +82,10 @@ def plot_common_bbox(geometries, SHOW_COMMON_BOUNDING_BOX=True, solid=True, colo
         plot_geometry_bbox(bbox_shape, solid=solid, color=color, linewidth=linewidth, zorder=zorder)
 
 
-def plot_coordinates(geom, SHOW_COORDINATES=True, size=13, color=None):
+def plot_coordinates(geom, SHOW_COORDINATES=True, size=13, color=None, zorder=10):
     ps = shapely.get_coordinates(geom)
     if SHOW_COORDINATES:
-        plt.scatter(xs(ps), ys(ps), size, zorder=10, color=inv_color(geom) if color == None else color)
+        plt.scatter(xs(ps), ys(ps), size, zorder=zorder, color=inv_color(geom) if color == None else color)
 
 
 def plot_intersecting_points(pts, SHOW_INTERSECTING_POINTS=True, color='black', zorder=10, size=22):
