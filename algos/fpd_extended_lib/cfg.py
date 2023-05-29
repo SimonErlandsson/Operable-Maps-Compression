@@ -8,12 +8,12 @@ required_bits = lambda x: int(np.ceil(np.log2(x + 2)))
 USE_DEFAULT_DOUBLE = False
 
 # Enable per delta entropy compression
-ENTROPY_METHOD = EM.NONE # 'HUFFMAN', 'GOLOMB', 'AUTO', 'NONE'.
+ENTROPY_METHOD = EM.AUTO # 'HUFFMAN', 'GOLOMB', 'AUTO', 'NONE'.
 # Whole chunk compression (all deltas in one, applied after entropy coding if active)
 CHUNK_COMP_METHOD = CM.NONE # 'ZLIB', 'GZIP', 'NONE'
 
 # Size of data-structures
-D_BITSIZE_SIZE = 12 # Size used to store the size of the chunks OPTIMIZE
+D_BITSIZE_SIZE = 15 # Size used to store the size of the chunks OPTIMIZE
 POLY_RING_CNT_SIZE = 10
 RING_CHK_CNT_SIZE = 15
 MAX_NUM_DELTAS = 13  # Max number of deltas in a chunk before split

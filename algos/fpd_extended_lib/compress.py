@@ -214,7 +214,7 @@ def calculate_delta_size(geometry=None, coords=None, return_deltas=False):
 def compress(self, geometry):
     s = time.perf_counter()
     cfg.ENTROPY_STATE = (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY)
-    optimal_size, _, deltas = calculate_delta_size(geometry, True)
+    optimal_size, _, deltas = calculate_delta_size(geometry, return_deltas=True)
     bin = fp_delta_encoding(geometry, optimal_size, deltas[1])
     (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY) = cfg.ENTROPY_STATE
     t = time.perf_counter()
