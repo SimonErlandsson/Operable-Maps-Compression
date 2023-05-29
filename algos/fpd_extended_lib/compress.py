@@ -179,9 +179,9 @@ def calculate_delta_size(geometry=None, coords=None, return_deltas=False):
     RESET_POINT_SIZE = FLOAT_SIZE * 2 + cfg.D_CNT_SIZE
     if geometry != None:
         coords = shapely.get_coordinates(geometry)
-    prev = [0, 0]
+    prev = coords[0]
     bit_cnts = {}
-    for coord in coords:
+    for coord in coords[1:]:
         bit_cnt = 0
         for i in range(2):
             d = get_zz_encoded_delta(prev[i], coord[i])
@@ -197,16 +197,19 @@ def calculate_delta_size(geometry=None, coords=None, return_deltas=False):
             bit_cnts[bit_cnt] += 1
         prev = coord
     bit_cnts = dict(sorted(bit_cnts.items(), reverse=True))
+    #bit_lens = range(32, -1, -1)
 
     tot_size = {}
     upper_cnt = 0
-    lower_cnt = len(coords)
+    lower_cnt = len(coords)  - 1
+    #for n in bit_lens:
     for n in bit_cnts.keys():
         tot_size[n] = n * lower_cnt * 2 + RESET_POINT_SIZE * upper_cnt
+        #if n in bit_cnts:
         lower_cnt -= bit_cnts[n]
         upper_cnt += bit_cnts[n]
     optimal_delta_size = min(tot_size, key=tot_size.get)
-    return optimal_delta_size, bit_cnts, deltas
+    return optimal_delta_size, [bit_cnts, tot_size], deltas
 
 def compress(self, geometry):
     s = time.perf_counter()

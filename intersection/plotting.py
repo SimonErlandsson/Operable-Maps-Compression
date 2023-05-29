@@ -64,10 +64,10 @@ def plot_geometry(geom, SHOW_GEOMETRIES=True, solid=True, alpha=1.0, fill_alpha=
             plt.plot(xs(ring_points), ys(ring_points), '-' if solid else '--', color=color, alpha=alpha)
 
 
-def plot_geometry_bbox(geom, SHOW_BOUNDING_BOXES=True, solid=False):
+def plot_geometry_bbox(geom, SHOW_BOUNDING_BOXES=True, solid=False, color=None, linewidth=1, zorder=-10):
     bbox = bbox_coords(geom)
     if SHOW_BOUNDING_BOXES:
-        plt.plot(xs(bbox), ys(bbox), '-' if solid else '--', color=geom_color(geom), zorder=-10)
+        plt.plot(xs(bbox), ys(bbox), '-' if solid else '--', color=geom_color(geom) if color == None else color, linewidth=linewidth, zorder=zorder)
 
 def plot_bounds(bounds, solid=False, color=None, zorder=20, alpha=1.0):
     if color == None:
@@ -76,16 +76,16 @@ def plot_bounds(bounds, solid=False, color=None, zorder=20, alpha=1.0):
     plt.plot(x_coords, y_coords, '-' if solid else '--', color=color, zorder=zorder, alpha=alpha)
 
 
-def plot_common_bbox(geometries, SHOW_COMMON_BOUNDING_BOX=True):
+def plot_common_bbox(geometries, SHOW_COMMON_BOUNDING_BOX=True, solid=True, color=None, linewidth=1, zorder=-10):
     bbox_shape = shapely.intersection(shapely.Polygon(bbox_coords(geometries[0])), shapely.Polygon(bbox_coords(geometries[1])))
     if SHOW_COMMON_BOUNDING_BOX:
-        plot_geometry_bbox(bbox_shape, solid=True)
+        plot_geometry_bbox(bbox_shape, solid=solid, color=color, linewidth=linewidth, zorder=zorder)
 
 
-def plot_coordinates(geom, SHOW_COORDINATES=True, size=13):
+def plot_coordinates(geom, SHOW_COORDINATES=True, size=13, color=None):
     ps = shapely.get_coordinates(geom)
     if SHOW_COORDINATES:
-        plt.scatter(xs(ps), ys(ps), size, zorder=10, color=inv_color(geom))
+        plt.scatter(xs(ps), ys(ps), size, zorder=10, color=inv_color(geom) if color == None else color)
 
 
 def plot_intersecting_points(pts, SHOW_INTERSECTING_POINTS=True, color='black', zorder=10, size=22):
