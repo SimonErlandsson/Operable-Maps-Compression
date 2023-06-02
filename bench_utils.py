@@ -5,6 +5,7 @@ import pandas as pd
 import geopandas as gpd
 import glob
 import tqdm
+import pickle
 import json
 
 def load_shp_files(base_loc):
@@ -64,6 +65,17 @@ def parse_intersection_data(file_name, max_shps=999999999, strip_precision=False
                 p1 = shapely.from_wkt(shapely.to_wkt(p1, rounding_precision=7))
                 p2 = shapely.from_wkt(shapely.to_wkt(p2, rounding_precision=7))
             intersects = data[i + 3]
+            geom_pairs.append((p1, p2))
+            geom_stats.append((type, intersects))
+    elif file_name.endswith('.pkl'):
+        with open(f'data/intersection/{file_name}', 'rb') as f:
+            intersections = pickle.load(f)
+        for type, p1_wkb, p2_wkb, intersects in intersections: # Don't include a new line in end of file
+            p1 = shapely.from_wkb(p1_wkb)
+            p2 = shapely.from_wkb(p2_wkb)
+            if strip_precision:
+                p1 = shapely.from_wkt(shapely.to_wkt(p1, rounding_precision=7))
+                p2 = shapely.from_wkt(shapely.to_wkt(p2, rounding_precision=7))
             geom_pairs.append((p1, p2))
             geom_stats.append((type, intersects))
     else:
