@@ -8,8 +8,8 @@ required_bits = lambda x: int(np.ceil(np.log2(x + 2)))
 USE_DEFAULT_DOUBLE = False
 
 # Enable per delta entropy compression
-ENTROPY_METHOD = EM.AUTO # 'HUFFMAN', 'GOLOMB', 'AUTO', 'NONE'.
-DISABLE_RANDOM_ACCESS = True # If using entropy encoding, should random access be disabled?
+ENTROPY_METHOD = EM.NONE # 'HUFFMAN', 'GOLOMB', 'AUTO', 'NONE'.
+DISABLE_RANDOM_ACCESS = False # If using entropy encoding, should random access be disabled?
 # Whole chunk compression (all deltas in one, applied after entropy coding if active)
 CHUNK_COMP_METHOD = CM.NONE # 'ZLIB', 'GZIP', 'NONE'
 
