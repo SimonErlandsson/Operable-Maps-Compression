@@ -141,7 +141,7 @@ def random_access(bin_in, idx, cache, offset_cache=None, get_chunk=False):
 
 
         delta_bytes_size = deltas_in_chunk * delta_size * 2
-        if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
+        if (cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY) and not cfg.DISABLE_RANDOM_ACCESS:
             delta_bytes_size -= bytes_to_int(bin, cfg.D_BITSIZE_SIZE)
 
         if get_chunk and cur_idx == idx:
@@ -177,7 +177,7 @@ def random_access(bin_in, idx, cache, offset_cache=None, get_chunk=False):
 
 def get_upcoming_vertex(bin, chk_offset):
     cfg.offset = chk_offset + cfg.D_CNT_SIZE
-    if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
+    if (cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY) and not cfg.DISABLE_RANDOM_ACCESS:
         cfg.offset += cfg.D_BITSIZE_SIZE
    
     return (bytes_to_double(bin), bytes_to_double(bin))
@@ -194,7 +194,7 @@ def access_vertex_chk(bin, chk_offset, delta_size, idx=None, cache=None, list_ve
     old_offset = cfg.offset
     cfg.offset = chk_offset
     deltas_in_chunk = bytes_to_uint(bin, cfg.D_CNT_SIZE)
-    if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
+    if (cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY) and not cfg.DISABLE_RANDOM_ACCESS:
         delta_bytes_size = deltas_in_chunk * delta_size * 2 - bytes_to_int(bin, cfg.D_BITSIZE_SIZE)
     
     if idx == None:

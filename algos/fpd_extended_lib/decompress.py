@@ -11,7 +11,7 @@ from algos.fpd_extended_lib.entropy_coder import decompress_chunk, decode_entrop
 
 # Structural things (per type):
 def sequence_decoder(bin, seq_list, delta_size):
-    LOAD_DT_BITSIZE = cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY
+    LOAD_DT_BITSIZE = (cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY) and not cfg.DISABLE_RANDOM_ACCESS
     chk_size = bytes_to_uint(bin, cfg.D_CNT_SIZE)
 
     if LOAD_DT_BITSIZE:
@@ -101,6 +101,8 @@ def fp_delta_decoding(bin_in):
 
 def decompress(self, bin):
     s = time.perf_counter()
+    cfg_start_state = (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY)
     geometry = fp_delta_decoding(bin)
+    (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY) = cfg_start_state
     t = time.perf_counter()
     return t - s, geometry

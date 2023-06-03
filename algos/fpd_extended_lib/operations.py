@@ -25,6 +25,7 @@ def type(self, bin):
 
 def vertices(self, bin_in):
     s = time.perf_counter()
+    cfg_start_state = (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY)
 
     coords = []
     cfg.offset = 0
@@ -49,7 +50,7 @@ def vertices(self, bin_in):
 
         deltas_in_chunk = bytes_to_uint(bin, cfg.D_CNT_SIZE)
 
-        if cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY:
+        if (cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY) and not cfg.DISABLE_RANDOM_ACCESS:
             delta_bytes_size = deltas_in_chunk * delta_size * 2 - bytes_to_int(bin, cfg.D_BITSIZE_SIZE)
 
         # Extract reset point
@@ -78,6 +79,7 @@ def vertices(self, bin_in):
 
     coords = np.array(coords)
 
+    (cfg.ENTROPY_METHOD, cfg.ENTROPY_PARAM, cfg.USE_ENTROPY) = cfg_start_state
     t = time.perf_counter()
     return t - s, coords
 

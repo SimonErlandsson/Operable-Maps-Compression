@@ -37,11 +37,12 @@ def point_count(geometry):
     return ring_count
 
 def append_header(bits, geometry, d_size, deltas):
+    global_use_entropy = cfg.USE_ENTROPY
     (cfg.ENTROPY_METHOD, cfg.USE_ENTROPY, cfg.ENTROPY_PARAM) = get_entropy_metadata(deltas, d_size)
     # Meta data
     bits.frombytes(uchar_to_bytes(d_size))
     bits.frombytes(uchar_to_bytes(int(shapely.get_type_id(geometry))))  # 1 byte is enough for storing type
-    if cfg.USE_ENTROPY:
+    if global_use_entropy:
         bits.frombytes(uchar_to_bytes(cfg.ENTROPY_PARAM))
     # Bounding Box
     if not cfg.DISABLE_OPTIMIZED_BOUNDING_BOX:
@@ -67,7 +68,7 @@ def fp_delta_encoding(geometry, d_size, deltas):
     bits = bitarray(endian='big')
     # Init with 'd_size', 'geom_type'
     append_header(bits, geometry, d_size, deltas)
-    STORE_DT_BITSIZE = cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY
+    STORE_DT_BITSIZE = (cfg.COMPRESS_CHUNK or cfg.USE_ENTROPY) and not cfg.DISABLE_RANDOM_ACCESS
 
     # Type specific variables
     geo_type = shapely.get_type_id(geometry)

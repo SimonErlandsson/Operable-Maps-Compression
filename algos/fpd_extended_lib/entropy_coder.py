@@ -177,7 +177,7 @@ def train_arith_model(model, dataset, iter = None):
 
 # Chunk based compression
 def compress_chunk(bits, chk_hdr_offset, delta_bytes_size):
-    chk_dt_offset = chk_hdr_offset + cfg.D_CNT_SIZE + cfg.D_BITSIZE_SIZE + 2 * cfg.FLOAT_SIZE
+    chk_dt_offset = chk_hdr_offset + cfg.D_CNT_SIZE + 2 * cfg.FLOAT_SIZE + cfg.D_BITSIZE_SIZE if not cfg.DISABLE_RANDOM_ACCESS else 0
     before_bits = bits[:chk_dt_offset]
     coords_bits = bits[chk_dt_offset:chk_dt_offset + delta_bytes_size]
     comp_dt_bits = bitarray()
@@ -222,8 +222,9 @@ def decompress_chunk(bits, chk_dt_offset, chk_dt_bitsize):
     else:
         decompressed_bits = comp_dt_bits
     
-    chk_header_offset = chk_dt_offset - 2 * cfg.FLOAT_SIZE - cfg.D_BITSIZE_SIZE - cfg.D_CNT_SIZE
-    before_bits[chk_header_offset + cfg.D_CNT_SIZE:chk_header_offset + cfg.D_CNT_SIZE + cfg.D_BITSIZE_SIZE] = int_to_ba(0, cfg.D_BITSIZE_SIZE) 
+    if not cfg.DISABLE_RANDOM_ACCESS:
+        chk_header_offset = chk_dt_offset - 2 * cfg.FLOAT_SIZE - cfg.D_BITSIZE_SIZE - cfg.D_CNT_SIZE
+        before_bits[chk_header_offset + cfg.D_CNT_SIZE:chk_header_offset + cfg.D_CNT_SIZE + cfg.D_BITSIZE_SIZE] = int_to_ba(0, cfg.D_BITSIZE_SIZE) 
 
     before_bits += decompressed_bits
     before_bits += after_bits

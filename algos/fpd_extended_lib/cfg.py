@@ -9,6 +9,7 @@ USE_DEFAULT_DOUBLE = False
 
 # Enable per delta entropy compression
 ENTROPY_METHOD = EM.AUTO # 'HUFFMAN', 'GOLOMB', 'AUTO', 'NONE'.
+DISABLE_RANDOM_ACCESS = True # If using entropy encoding, should random access be disabled?
 # Whole chunk compression (all deltas in one, applied after entropy coding if active)
 CHUNK_COMP_METHOD = CM.NONE # 'ZLIB', 'GZIP', 'NONE'
 
@@ -19,7 +20,7 @@ RING_CHK_CNT_SIZE = 15
 MAX_NUM_DELTAS = 13  # Max number of deltas in a chunk before split
 D_CNT_SIZE = required_bits(MAX_NUM_DELTAS + 1)
 
-BASELINE_ON = False
+BASELINE_ON = True
 # Disable True FPDE operations
 DISABLE_OPTIMIZED_UNPACKING = False
 DELTA_ENCODE_CHUNK_BBOXES = False
