@@ -26,8 +26,11 @@ def is_bboxs_intersecting(bbox_1, bbox_2):
 
 
 def calculate_final_stats(start_time):
+        #Shifts the stats
+        perf_counter[1] = perf_counter[1] + perf_counter[2]
+        perf_counter[2] = perf_counter[3]
         perf_counter[3] = time.perf_counter() - start_time        
-        return perf_counter
+        return perf_counter[:-1]
 
 def select_return(get_stats, ret_value, start_time):
     if not get_stats:
@@ -47,7 +50,7 @@ def are_lines_parallel(seg1, seg2):
 def get_chunk(bin, idx, offset_cache=None, glob_idx = None): 
     s = time.perf_counter()
     if not cfg.DISABLE_OPTIMIZED_INTERSECTION:
-        perf_counter[1] += 1
+        perf_counter[1 + glob_idx] += 1
         res = fpd.get_chunk(bin, idx, offset_cache=offset_cache)[0] # Can also use slow above for debugging
     else: 
         res = [tuple(l) for l in glob_chunks[glob_idx][idx]]
@@ -61,7 +64,7 @@ def chunk_to_shape(chk): return LineString(chk) if len(chk) != 1 else  Point(chk
 #Calculate the global variables for chunks and bounding boxes when cfg.DISABLE_OPTIMIZED_INTERSECTION = True
 def calculate_globals(bins):
     global perf_counter
-    perf_counter = [0, 0, 0, 0]
+    perf_counter = [0, 0, 0, 0, 0]
     if cfg.DISABLE_OPTIMIZED_INTERSECTION:
         start_time = time.perf_counter()
 
@@ -95,7 +98,6 @@ def calculate_globals(bins):
 
 #Calculate the common bounding box from two FPDE compressed binaries
 def common_bbox(bins):  
-    s = time.perf_counter()
     # Left, bottom, right, top of bounding boxes
     x_l_1, y_b_1, x_r_1, y_t_1 = bounding_box(bins[0], 0)
     x_l_2, y_b_2, x_r_2, y_t_2 = bounding_box(bins[1], 1)
@@ -105,8 +107,6 @@ def common_bbox(bins):
 
     #Match common bounding box with context
     if x_r < x_l or y_t < y_b:
-
-        perf_counter[0] += time.perf_counter() - s #Index 0 has common_bbox information
         return (None, 'None') #Return if common bounding box do is empty
     
     elif x_l_1 == x_l_2 and y_b_1 == y_b_2 and x_r_1 == x_r_2 and y_t_1 == y_t_2:
@@ -117,7 +117,6 @@ def common_bbox(bins):
         type = '2 in 1'
     else:
         type = 'Partial'
-    perf_counter[0] += time.perf_counter() - s #Index 0 has common_bbox information
 
     return ([x_l, y_b, x_r, y_t], type)
 
@@ -128,7 +127,7 @@ def get_chunks_idxs_within_bounds(bin, bbox, glob_idx, get_geom_bounds=False):
     s = time.perf_counter()
     if cfg.DISABLE_OPTIMIZED_INTERSECTION:
         chunks_bounds = glob_chunk_bounds[glob_idx]
-        perf_counter[1] += len(glob_chunks[glob_idx])
+        perf_counter[1] += len(chunks_bounds)
     else:
         chunks_bounds = fpd.get_chunk_bounds(bin) #Get bounds from geometry
 
@@ -136,7 +135,7 @@ def get_chunks_idxs_within_bounds(bin, bbox, glob_idx, get_geom_bounds=False):
     res = chk_idxs if not get_geom_bounds else (chk_idxs, chunks_bounds)    
     
     perf_counter[0] += time.perf_counter() - s
-    perf_counter[2] += len(chunks_bounds)
+    perf_counter[3] += len(chunks_bounds)
    
     return res
 
@@ -179,7 +178,6 @@ def is_contained_within(containee, container, container_bounds, glob_idx = None,
     for c in chks:
         if c not in cache:
             #if not cfg.DISABLE_OPTIMIZED_INTERSECTION:
-                
             chunk_shape = chunk_to_shape(get_chunk(container, c, glob_idx=glob_idx))
             cache[c] = chunk_shape
             segments.append(chunk_shape)
@@ -455,9 +453,14 @@ def intersection(bins, debug_correct_ans=None, plot_all=False, get_stats=False):
     if len(line_data) == 0:
         _, bounds = result
         if overlap_type == '1 in 2' and is_contained_within(bins[0], bins[1], bounds[1], 1, debug_correct_ans=debug_correct_ans, plot_all=plot_all, cache=cache[1]):
+            s = time.perf_counter()
             res = fpd.decompress(bins[0])[1] # Return whole smaller shape
+            perf_counter[0] += time.perf_counter() - s
+
         elif overlap_type == '2 in 1' and is_contained_within(bins[1], bins[0], bounds[0], 0, debug_correct_ans=debug_correct_ans, plot_all=plot_all, cache=cache[0]):
-            res = fpd.decompress(bins[1])[1]
+            s = time.perf_counter()
+            res = fpd.decompress(bins[1])[1] # Return whole smaller shape
+            perf_counter[0] += time.perf_counter() - s
         else:
             res = Polygon(None)
         
@@ -551,7 +554,7 @@ def intersection(bins, debug_correct_ans=None, plot_all=False, get_stats=False):
                 if next_seg_idx > -1 and next_seg_idx < len(segments[s]) and segments[s][next_seg_idx][0][0] == None:
                     #While next chunk is an non-unfolded one
                     while(next_seg_idx > -1 and next_seg_idx < len(segments[s]) and segments[s][next_seg_idx][0][0] == None):
-                        follow_chunk = get_chunk(bins[s], segments[s][next_seg_idx][0][1], offset_cache=offset_cache[s]) #compress that chunk
+                        follow_chunk = get_chunk(bins[s], segments[s][next_seg_idx][0][1], offset_cache=offset_cache[s], glob_idx=s) #compress that chunk
                         follow_segments = [(follow_chunk[i], follow_chunk[i + 1]) for i in range(len(follow_chunk) - 1)]  #Create  the segments
                         
                         #If there is no segments to  traverse
