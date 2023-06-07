@@ -28,7 +28,7 @@ def is_bboxs_intersecting(bbox_1, bbox_2):
 def calculate_final_stats(start_time):
         #Shifts the stats
         perf_counter[1] = perf_counter[1] + perf_counter[2]
-        perf_counter[2] = perf_counter[3]
+        perf_counter[2] = perf_counter[3] + perf_counter[4]
         perf_counter[3] = time.perf_counter() - start_time        
         return perf_counter[:-1]
 
@@ -127,7 +127,7 @@ def get_chunks_idxs_within_bounds(bin, bbox, glob_idx, get_geom_bounds=False):
     s = time.perf_counter()
     if cfg.DISABLE_OPTIMIZED_INTERSECTION:
         chunks_bounds = glob_chunk_bounds[glob_idx]
-        perf_counter[1] += len(chunks_bounds)
+        perf_counter[1 + glob_idx] += len(chunks_bounds)
     else:
         chunks_bounds = fpd.get_chunk_bounds(bin) #Get bounds from geometry
 
@@ -135,7 +135,7 @@ def get_chunks_idxs_within_bounds(bin, bbox, glob_idx, get_geom_bounds=False):
     res = chk_idxs if not get_geom_bounds else (chk_idxs, chunks_bounds)    
     
     perf_counter[0] += time.perf_counter() - s
-    perf_counter[3] += len(chunks_bounds)
+    perf_counter[3 + glob_idx] += len(chunks_bounds)
    
     return res
 
@@ -455,11 +455,13 @@ def intersection(bins, debug_correct_ans=None, plot_all=False, get_stats=False):
         if overlap_type == '1 in 2' and is_contained_within(bins[0], bins[1], bounds[1], 1, debug_correct_ans=debug_correct_ans, plot_all=plot_all, cache=cache[1]):
             s = time.perf_counter()
             res = fpd.decompress(bins[0])[1] # Return whole smaller shape
+            perf_counter[1] = perf_counter[3]
             perf_counter[0] += time.perf_counter() - s
 
         elif overlap_type == '2 in 1' and is_contained_within(bins[1], bins[0], bounds[0], 0, debug_correct_ans=debug_correct_ans, plot_all=plot_all, cache=cache[0]):
             s = time.perf_counter()
             res = fpd.decompress(bins[1])[1] # Return whole smaller shape
+            perf_counter[2] = perf_counter[4]
             perf_counter[0] += time.perf_counter() - s
         else:
             res = Polygon(None)
