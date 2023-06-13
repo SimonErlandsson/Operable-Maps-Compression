@@ -151,3 +151,8 @@ data/intersection/final/sweden_all_100k.pkl.zip
 data/intersection/final/sweden_all_100k.pkl
 data/intersection/final/china_water_100k.pkl.zip
 data/intersection/final/china_water_100k.pkl
+stats_df_Sweden All.csv
+max_deltas_Sweden All.csv
+max_deltas_lund_data.csv
+max_deltas_Country Borders.csv
+max_deltas_China Water.csv

@@ -2,7 +2,7 @@ from collections import defaultdict
 from shapely import LineString, Point, MultiPolygon, MultiLineString, MultiPoint, GeometryCollection, Polygon, ops, get_coordinates
 import numpy as np
 from algos.alg_fpd_extended import FpdExtended
-from intersection.plotting import plot_chunks_bounds, plot_geometry, plot_intersecting_points, create_canvas, plot_line
+from intersection.plotting import plot_chunks_bounds, plot_common_bbox, plot_geometry, plot_geometry_bbox, plot_intersecting_points, create_canvas, plot_line
 from algos.fpd_extended_lib.cfg import *
 import matplotlib.pyplot as plt
 import math
@@ -321,9 +321,52 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
 
     # create_canvas(no_frame=True, zoom=1.5)
     # for s in range(2):
+    #     plot_geometry(fpd.decompress(bins[s])[1], fill_alpha=0.1, hatch=('\\' if s == 0 else '/'), color=('blue' if s == 0 else 'green'))
+    # from shapely import intersection as s_inter
+    # inter_shape = s_inter(fpd.decompress(bins[0])[1], fpd.decompress(bins[1])[1])
+    # plot_geometry(inter_shape, fill_alpha=0.3, hatch='X', color='purple')
+    # plt.show()
+
+    # create_canvas(no_frame=True, zoom=1.5)
+    # for s in range(2):
+    #     plot_geometry(fpd.decompress(bins[s])[1], fill_alpha=0.1, hatch=('\\' if s == 0 else '/'), color=('blue' if s == 0 else 'green'))
+    #     plot_geometry_bbox(fpd.decompress(bins[s])[1], solid=False, color=('blue' if i == 0 else 'green'), linewidth=2)
+    # plot_common_bbox([fpd.decompress(bins[0])[1], fpd.decompress(bins[1])[1]], color='red', linewidth=3, zorder=10)
+
+    # from shapely import intersection as s_inter
+    # inter_shape = s_inter(fpd.decompress(bins[0])[1], fpd.decompress(bins[1])[1])
+    # plot_geometry(inter_shape, fill_alpha=0.3, hatch='X', color='purple')
+    # plt.show()
+
+    # create_canvas(no_frame=True, zoom=1.5)
+    # for s in range(2):
     #     chunks_not_loaded = list(filter(lambda x: x not in chk_idxs[s], list(range(len(bounds[s])))))
-    #     plot_chunks_bounds(bins[s], include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chunks_not_loaded, solid=False, alpha=0.3, fill_alpha=0.05, color='black', point_color='cyan', point_size=9)
-    #     plot_chunks_bounds(bins[s], include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chk_idxs[s], alpha=1.0, color='orange', point_color='red', point_size=14)
+    #     plot_chunks_bounds(bins[s], include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chunks_not_loaded, solid=False, alpha=1, fill_alpha=0.1, color='black', point_color='cyan', point_size=0)
+    #     plot_chunks_bounds(bins[s], include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chk_idxs[s], alpha=1.0, color='orange', point_color='red', fill_alpha=0.1, point_size=0)
+    #     plot_geometry(fpd.decompress(bins[s])[1], fill_alpha=0.1, hatch=('\\' if s == 0 else '/'), color=('blue' if s == 0 else 'green'))
+    # from shapely import intersection as s_inter
+    # inter_shape = s_inter(fpd.decompress(bins[0])[1], fpd.decompress(bins[1])[1])
+    # plot_geometry(inter_shape, fill_alpha=0.3, hatch='X', color='purple')
+    # plot_common_bbox([fpd.decompress(bins[0])[1], fpd.decompress(bins[1])[1]], color='red', linewidth=1, zorder=10)
+    # plt.show()
+
+    # create_canvas(no_frame=True, zoom=1.5)
+    # for s in range(2):
+    #     chunks_not_loaded = list(filter(lambda x: x not in chks_filt[s], list(range(len(bounds[s])))))
+    #     plot_chunks_bounds(bins[s], include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chunks_not_loaded, solid=False, alpha=1, fill_alpha=0.1, color='black', point_color='cyan', point_size=0)
+    #     plot_chunks_bounds(bins[s], include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chks_filt[s], alpha=1.0, color='orange', point_color='red', fill_alpha=0.1, point_size=0)
+    #     plot_geometry(fpd.decompress(bins[s])[1], fill_alpha=0.1, hatch=('\\' if s == 0 else '/'), color=('blue' if s == 0 else 'green'))
+    # from shapely import intersection as s_inter
+    # inter_shape = s_inter(fpd.decompress(bins[0])[1], fpd.decompress(bins[1])[1])
+    # plot_geometry(inter_shape, fill_alpha=0.3, hatch='X', color='purple')
+    # plot_common_bbox([fpd.decompress(bins[0])[1], fpd.decompress(bins[1])[1]], color='red', linewidth=1, zorder=10)
+    # plt.show()
+
+    # create_canvas(no_frame=True, zoom=1.5)
+    # for s in range(2):
+    #     chunks_not_loaded = list(filter(lambda x: x not in chks_filt[s], list(range(len(bounds[s])))))
+    #     plot_chunks_bounds(bins[s], alpha=0, include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chunks_not_loaded, solid=False, fill_alpha=0, color='black', point_color='orange', point_size=9)
+    #     plot_chunks_bounds(bins[s], alpha=0, include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chks_filt[s], color='orange', point_color='red', point_size=14)
     #     plot_geometry(fpd.decompress(bins[s])[1], fill_alpha=0.1, hatch=('\\' if s == 0 else '/'), color=('blue' if s == 0 else 'green'))
     # from shapely import intersection as s_inter
     # inter_shape = s_inter(fpd.decompress(bins[0])[1], fpd.decompress(bins[1])[1])
