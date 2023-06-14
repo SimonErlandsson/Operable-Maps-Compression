@@ -366,7 +366,7 @@ def line_intersection(bins, bbox, debug_correct_ans, res_list=None, plot_all=Fal
     # for s in range(2):
     #     chunks_not_loaded = list(filter(lambda x: x not in chks_filt[s], list(range(len(bounds[s])))))
     #     plot_chunks_bounds(bins[s], alpha=0, include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chunks_not_loaded, solid=False, fill_alpha=0, color='black', point_color='orange', point_size=9)
-    #     plot_chunks_bounds(bins[s], alpha=0, include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chks_filt[s], color='orange', point_color='red', point_size=14)
+    #     plot_chunks_bounds(bins[s], alpha=0, include_next_chunk_start=True, avoid_show=True, avoid_create_frame=True, idxs=chks_filt[s], color='orange', point_color='red', fill_alpha=0, point_size=14)
     #     plot_geometry(fpd.decompress(bins[s])[1], fill_alpha=0.1, hatch=('\\' if s == 0 else '/'), color=('blue' if s == 0 else 'green'))
     # from shapely import intersection as s_inter
     # inter_shape = s_inter(fpd.decompress(bins[0])[1], fpd.decompress(bins[1])[1])
