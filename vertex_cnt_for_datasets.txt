@@ -448,3 +448,39 @@ Total: 76334, avg: 12.03, std: 27.95, median: 6.0, min: 4, max: 3458, #>=25: 589
 data/sweden-latest-free/gis_osm_roads_free_1.shp
 Total: 1904260, avg: 12.65, std: 21.76, median: 6.0, min: 2, max: 1574, #>=25: 227964 (11.97), #>=100: 20597 (1.08), #>=200: 3394 (0.18), #>=500: 123 (0.01), #>=1000: 3 (0.0)
 
+data/sweden-latest-free\gis_osm_buildings_a_free_1.shp
+Total: 2827275, avg: 6.3, std: 3.52, median: 5.0, min: 4, max: 419, #>=25: 13991 (0.49), #>=100: 220 (0.01), #>=200: 18 (0.0), #>=500: 0 (0.0), #>=1000: 0 (0.0)
+
+data/sweden-latest-free\gis_osm_landuse_a_free_1.shp
+Total: 1059602, avg: 40.46, std: 314.82, median: 14.0, min: 4, max: 132194, #>=25: 306338 (28.91), #>=100: 54216 (5.12), #>=200: 23101 (2.18), #>=500: 8441 (0.8), #>=1000: 3985 (0.38)
+
+data/sweden-latest-free\gis_osm_natural_a_free_1.shp
+Total: 3465, avg: 25.99, std: 86.9, median: 12.0, min: 4, max: 3815, #>=25: 734 (21.18), #>=100: 118 (3.41), #>=200: 44 (1.27), #>=500: 10 (0.29), #>=1000: 3 (0.09)
+
+data/sweden-latest-free\gis_osm_places_a_free_1.shp
+Total: 1587, avg: 517.6, std: 1538.89, median: 148.0, min: 4, max: 27776, #>=25: 1206 (75.99), #>=100: 912 (57.47), #>=200: 703 (44.3), #>=500: 373 (23.5), #>=1000: 176 (11.09)
+
+data/sweden-latest-free\gis_osm_pofw_a_free_1.shp
+Total: 3753, avg: 12.23, std: 8.1, median: 11.0, min: 5, max: 175, #>=25: 156 (4.16), #>=100: 4 (0.11), #>=200: 0 (0.0), #>=500: 0 (0.0), #>=1000: 0 (0.0)
+
+data/sweden-latest-free\gis_osm_pois_a_free_1.shp
+Total: 76334, avg: 12.03, std: 27.95, median: 6.0, min: 4, max: 3458, #>=25: 5893 (7.72), #>=100: 488 (0.64), #>=200: 152 (0.2), #>=500: 37 (0.05), #>=1000: 7 (0.01)
+
+data/sweden-latest-free\gis_osm_railways_free_1.shp
+Total: 25885, avg: 13.72, std: 23.34, median: 6.0, min: 2, max: 448, #>=25: 3599 (13.9), #>=100: 357 (1.38), #>=200: 53 (0.2), #>=500: 0 (0.0), #>=1000: 0 (0.0)
+
+data/sweden-latest-free\gis_osm_roads_free_1.shp
+Total: 1904260, avg: 12.65, std: 21.76, median: 6.0, min: 2, max: 1574, #>=25: 227964 (11.97), #>=100: 20597 (1.08), #>=200: 3394 (0.18), #>=500: 123 (0.01), #>=1000: 3 (0.0)
+
+data/sweden-latest-free\gis_osm_traffic_a_free_1.shp
+Total: 78754, avg: 7.51, std: 5.4, median: 5.0, min: 4, max: 309, #>=25: 1091 (1.39), #>=100: 18 (0.02), #>=200: 5 (0.01), #>=500: 0 (0.0), #>=1000: 0 (0.0)
+
+data/sweden-latest-free\gis_osm_transport_a_free_1.shp
+Total: 852, avg: 18.96, std: 30.12, median: 9.0, min: 5, max: 347, #>=25: 153 (17.96), #>=100: 26 (3.05), #>=200: 5 (0.59), #>=500: 0 (0.0), #>=1000: 0 (0.0)
+
+data/sweden-latest-free\gis_osm_waterways_free_1.shp
+Total: 103816, avg: 26.22, std: 65.94, median: 8.0, min: 2, max: 1922, #>=25: 24001 (23.12), #>=100: 5680 (5.47), #>=200: 2132 (2.05), #>=500: 373 (0.36), #>=1000: 52 (0.05)
+
+data/sweden-latest-free\gis_osm_water_a_free_1.shp
+Total: 295715, avg: 48.01, std: 488.1, median: 17.0, min: 4, max: 207699, #>=25: 105568 (35.7), #>=100: 22603 (7.64), #>=200: 9653 (3.26), #>=500: 2912 (0.98), #>=1000: 1075 (0.36)
+
