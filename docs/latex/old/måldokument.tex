@@ -1,0 +1,108 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{todonotes}
+\usepackage{lipsum}
+\linespread{1.3} 
+\usepackage{hyperref} 
+
+
+%Compression algorithm for geometries able to support some basic boolean operations on polygons such as polyline intersections (without need to decompress data first).
+\title{Compression Algorithm for Geometries Supporting Basic Operations \\
+  \large Goals of the Degree Project }
+
+\author{Simon Erlandsson, Leo Westerberg }
+\date{January 2023}
+
+\begin{document}
+\maketitle
+
+% Arbetstitel, inblandades namn och kontaktuppgifter samt preliminärt start- och %slutdatum.
+\section{Stakeholders and Project Duration}
+\begin{table}[h]
+\begin{tabular}{llll}
+Simon Erlandsson & Student    & si5417er-s@student.lu.se   & LTH             \\
+Leo Westerberg   & Student    & le8037we-s@student.lu.se   & LTH             \\
+Hampus Londögård & Supervisor & hampus.londogard@afry.com  & AFRY            \\
+Jonas Skeppstedt & Supervisor & jonas.skeppstedt@cs.lth.se & Lund University \\
+Per Andersson    & Examiner   & per.andersson@cs.lth.se    & Lund University
+\end{tabular}
+\end{table}
+
+\noindent
+The preliminary starting and ending dates are 2023-02-06 until 2023-06-23. The master thesis is subject to 30 credits per person, amounting to 20 weeks of combined work. However, longer than 40-hour work weeks may occur, potentially shortening the duration.
+
+
+%Bakgrund/kontext och motiv för examensarbetet.
+\section{Background}
+Geometric data can be used to describe spatial relationships between objects. For online map services, minimizing the needed data storage and transmission capacity while maintaining performance is of great interest. To reduce the data size, compression algorithms can be applied to remove redundancies in the data. However, by doing so, if using conventional compression algorithms, the data has to be decompressed before it can be operated on. If basic but common operations could be performed on the compressed data, the space–time complexity trade-off would be reduced.
+\\\\
+AFRY is working on improving Apple Maps and would like to investigate potential improvements in the geometry pipeline with regard to space and time efficiency. For map applications, being able to calculate simple operations, such as intersections between objects in the map, allows for further validation checks and relationships. For instance, determining where a house polygon intersects with a lake polygon in order to classify the area.
+
+%Övergripande mål och problemställningar/forskningsfrågor.
+\section{Project Description}
+The problem statement can be based on the context in the background description; is it possible to do basic operations on compressed geometry data without the need to decompress the data? This also includes being able to decompress it back to its original form (without loss) after the operation has been done. Modern compression algorithms are often improvements or combinations of prior methods. The investigation will similarly modify different compression schemes to embody basic unary operations on single geometrical objects, as well as binary operations where two geometrical objects interact. The project's domain will be maps data where geometrical forms such as points, polylines, and polygons are used to describe different kinds of objects.
+
+\section{Methodology}
+The methodology for creating a compression algorithm suitable for basic operations is as follows:
+
+\begin{enumerate}
+
+    \item Look into different sources for open-source map data where the geometrical object format is known. When decided, incorporate the data into an existing geometric framework, such as \emph{CGAL}.
+    
+  \item Investigate what kinds of algorithms are suitable for geometrical map data.
+  
+  \item Based on the algorithms found in step 1, change the underlying structure of the compression to enable unary, binary, and boolean operations. For example, determining if a polygon contains a point, intersection, union, difference, and symmetric difference.
+  
+  \item Measure the performance difference between the original algorithms and the modified ones, both in terms of efficiency and space. A time-space trade-off most likely has to be made when adding more operations.
+
+\end{enumerate}
+
+
+
+%Vetenskaplig grund och beprövad erfarenhet som examensarbetet ska bygga vidare på. Detta %kan till exempel beskrivas i form av ett par nyckelreferenser till artiklar eller annat %underlag.
+
+\section{Related Articles}
+
+
+There are little to no earlier attempts in the investigation to do basic operations on compressed geometry data. However down below are a list of articles that are relevant to our master thesis project:
+\begin{itemize}
+\item \url{https://users.dcc.uchile.cl/~gnavarro/ps/jcss22.pdf}
+
+State-of-the-art compression method using quadtrees for efficiently storing clustered points with fast querying
+
+\item \url{https://users.dcc.uchile.cl/~gnavarro/ps/spire20.2.pdf}
+
+A paper on grammar-based compression with faster random access querying, which is important for processing compressed data without decompressing it. This paper may serve as inspiration when investigating similar compression traits on a geometric compression. 
+
+\item \url{https://www.majidsas.com/pdf/Spatial_Parquet.pdf}
+
+A paper about an extension of Parquet storage for supporting geometric data, including indexing, efficient encoding, and data type.
+
+\item \url{https://www.databricks.com/blog/2019/12/05/processing-geospatial-data-at-scale-with-databricks.html}
+
+Issues with processing spatial data on a large scale, along with some possible improvements such as Grid Systems. Also gives a brief overview of formats used for representation and rasterization. 
+
+\item \url{https://link.springer.com/chapter/10.1007/978-981-16-4095-7_6}
+
+Examines recompression; transforming compressed data between different compression formats without decompressing. Also addresses privacy-preserving computation on compressed string data.  
+
+\item \url{https://web.cse.ohio-state.edu/~shen.94/Su01_888/deering.pdf}
+
+Gives insight in methods for lossy 3D Geometry Compression, obtaining a compression factor of 6-10. Although lossy compression is not appliacable in our case, the paper may still serve as inspiration on representing the geometry and alternative compression methods.
+
+%\item \url{https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry}
+
+
+
+\end{itemize}
+
+%Hur förväntas examensarbetet bidra till kunskapsutvecklingen?
+\section{Expected Scientific Contribution}
+The project is expected to contribute to scientific research by further investigating how existing compression algorithms can be applied to a niche datatype, while maintaining basic operability. Research regarding operating on compressed geometric data is currently limited.
+
+%Preliminär beskrivning av resurser som krävs för arbetets genomförande, t ex arbetsplats %och utrustning, och hur dessa ordnas och finns tillgängliga.
+\section{Resources}
+%Detta kanske vi får diskutera lite närmre med Apple och tillsammans innan vi lämnar in
+We are currently discussing with Apple to sign a non-disclosure agreement that could possibly let us work from their office in Malmö, as well as borrow technical equipment for our thesis.
+
+\end{document}

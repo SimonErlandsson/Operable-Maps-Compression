@@ -1,0 +1,83 @@
+\chapter[Introduction]{Introduction}
+\section{Background}
+
+% ·\todo{skriv om att är kombo av impl. och påkommen teori}
+
+Geometric data is a powerful tool for describing spatial relationships between physical objects. In online maps services, geometries are frequently used to represent various structures on the map, such as roads and buildings. By modeling an area as geometric objects, spatial relationships can be inferred directly or explicitly stated, enabling analysis and querying of the data. However, due to the inherently extensive information size for creating a detailed map, minimizing the needed data storage and transmission capacity while maintaining optimal performance is of great interest to map service providers.
+
+Compression algorithms can reduce the size of modeled maps by eliminating redundancies in the data. However, conventional algorithms transform the data to an inoperable state, requiring the data to be decompressed before it can be operated on. Additionally, operations that involve modifications to the map require the compressed data to be recompressed to maintain a coherent representation. Since these steps can be time-consuming, integrated operability of compressed geometries could reduce the overhead of needing to fully decompress the data while still allowing for a reduction in size by utilizing compression methods. This way, a balance between reducing storage space and efficient operations can be established.
+
+Furthermore, general-purpose compression algorithms are not tailored to operate on maps data. Therefore, it may be possible to increase the size reduction beyond common compression algorithms by exploiting the maps domain and combining existing compression schemes.
+\\\\
+AFRY is working on enhancing maps services and would like to investigate potential improvements in the geometry pipeline with regard to space and time efficiency. For map applications, being able to perform operations, such as determining intersections between objects in the map, allows for further validation checks and relationships. For instance, determining where a house polygon intersects with a lake polygon in order to classify the area.
+
+\section{Problem Definition}
+Considering the background, the following research questions have been established:
+\begin{description}
+    \item[Q1:] Is it possible to perform operations on compressed geometric data without decompressing the entire geometries?
+    \item[Q2:] How can domain-specific constraints and structures, in the context of maps, be exploited to improve the performance of operations and geometry compression?
+\end{description}
+This also includes being able to decompress the data back to its original form without loss after compression has been applied.
+ \\\\
+Modern compression algorithms are usually improvements or combinations of prior methods. The investigation will similarly modify different compression schemes to embody unary operations on single geometrical objects, as well as binary operations where two geometrical objects interact. 
+\\\\
+The project is anticipated to make a scientific contribution by exploring how existing compression algorithms can be adapted to a niche datatype, while preserving or improving operation performance. Research regarding operating on compressed geometric data is currently limited.
+
+\label{scopeLimit}
+\section{Scope \& Limitations}
+The project's domain will be maps data where geometrical forms such as points, polylines, and polygons are used to describe different objects. The investigation will focus on the more frequent operations made on map data and be limited to two-dimensional geometries. In order to limit the scope, three operations: intersection, bounding box, and adding vertices to a shape, are primarily optimized in the thesis.
+\\\\
+Furthermore, existing compression schemes will be used, and the goal of the thesis is not to invent a principally new compression algorithm but to combine existing compression schemes, data structures, and algorithms to improve operational efficiency and compression efficiency in terms of size in the spatial data domain.
+\\\\
+The algorithm implementations in the thesis are written in Python. The reason for the choice is to enable fast iterations and high productivity in a project which requires much exploration of different implementation designs. Due to Python being an interpreted language, lacking compilation and extensive optimization, Python is not an ideal language in terms of speed. In order to counter this, a comparison baseline is written in Python, and the relative difference in performance between the implementations is used as a means of evaluation. The resulting compression size is language-independent and thus unaffected by Python's limitations.
+
+\section{Related Work}
+There are little to no earlier attempts in the investigation of doing operations on compressed geometry data. However, compression algorithms are still at the foundation of this thesis, and the structure of creating a compression format, and supporting operations, rely heavily on previous work and ideas.
+
+\subsubsection{Spatial Parquet: A Column File Format for Geospatial Data Lakes}
+In a paper by \citet{spatialparquet} in 2022, the column-based storage format Parquet is extended with efficient support for spatial data. In column-based storage, homogeneous values are grouped together, making it possible to use their redundancies to create efficient storage. Delta encoding is a well-known method for storing differences between values rather than the complete values. However, for spatial data, with coordinates consisting of floating-points, a small floating-point value does not necessarily mean that fewer bits are needed. To tackle this, the paper suggests floating-point delta encoding, which interprets the underlying structure of floating-point values as integers and calculates the delta. The paper also proposes a method to partition the column values into independent data sections, allowing for separate compression of the units \cite{spatialparquet}. 
+
+Floating-point delta encoding and partitioning of compressed data are two concepts that are useful for the thesis. The prior allows for a compact representation of a sequence of coordinates, while the latter enables indexing and fractional compression opportunities by dividing regions within geometries into independent chunks.
+
+\subsubsection{Fast and Efficient Compression of Floating-Point Data}
+
+\citet{fpzip} proposes a state-of-the-art lossless compression scheme targeted at floating-point data concerning bottlenecks where the growth of the dataset exceeds the available I/O bandwidth. The essence of the algorithm is to store the residuals between the actual floating-point values and their corresponding predicted value, where the prediction is accomplished using a subset of previously encoded data. Similarly to \citet{spatialparquet}, the bit sequence of the floating-point value and the prediction are interpreted as sign-magnitude binary integers before calculating their difference. The reason is a possible loss of information due to underflow when using floating-point subtraction. Furthermore, when the residuals have been computed, they are subject to entropy range encoding, a variant of arithmetic encoding leading to even higher compression ratios.
+
+Besides the concept of using residuals between actual values and predicted ones, this paper gives insight into how multiple compression methods can be combined into a longer pipeline. Also, noticing similarities between different sources gives an understanding of what is considered good practice in the industry.
+
+\subsubsection{RasterZip: Compressing Network Monitoring Data with Support for Partial Decompression}
+
+RasterZIP, proposed by \citet{localDecomp}, is a lossless encoding scheme for network traffic data with support for partial compression and decompression. The format exploits patterns in traffic data, such as the common prefixes in IP addresses, to compress beyond the limits of general-purpose algorithms. By using partial compression, RasterZIP has the ability to compress more than half a million traffic records per second, while only targeting compression and decompression on tiny fractions of the dataset.
+
+When integrating operations into a compression scheme, partial decompression is an excellent method for only unfolding relevant dataset fractions for the operation. The concept of partial decompression is at the core of many of the operation implementations in this thesis.
+
+\subsubsection{A Simple Algorithm for Boolean Operations on Polygons}
+Polygon clipping is a geometrical operation that constrains a polygon to fit within a defined region. Specifically, one polygon defines the area to be clipped, while another determines the clipping boundaries. Algorithms for boolean operations on polygons, with their basis in polygon clipping, are typically accompanied by geometrical constraints. For example, disallowing internal holes within the polygons or requiring the clipping boundaries to be either convex or rectangular. \citet{polygonclipping} proposes an efficient way of performing boolean operations on polygons, even in degenerate cases. The foundation of the algorithm is to subdivide the edges at their intersection points and categorize the edges as lying either inside or outside the other polygon. Depending on the boolean operation, edges with similar inside-outside statuses are selected and interconnected. The algorithm uses many efficient techniques, such as an extended version of the sweep lines algorithm by Bentley and Ottmann \cite{sweeplines} for finding intersection points in $\mathcal{O}((n + k) \log (n))$ time, where $n$ is the number of line segments and $k$ is the number of crossings.
+
+This paper helped to understand how intersections between different geometries can be calculated in more advanced cases without constraints. Even though the algorithm this thesis proposes for intersection only uses a subset of all the edges in the geometry, many of the ideas are based on \citet{polygonclipping}.
+
+\section{Disposition}
+
+\begin{description}
+    \item [Introduction] In the outline, the section describes the background and context of the thesis. Subsequently, the research questions are stated together with the scope and limitations. Lastly, related work with closely connected research papers and contribution statements are presented.
+    
+ 
+    \item [Theoretical Background] Provides the necessary theoretical background on spatial data and compression to understand the subsequent parts of the thesis.
+    
+    \item [Methodology] Introduces the methodology used to answer the research questions and conduct a robust investigation.
+    
+    \item [Algorithm Implementations] Describes the implementation phase of the thesis, with details about the created compression scheme and how support for several operations was integrated.
+    
+   
+    \item [Results] Presents and reasons about the various results made from the previous sections.
+
+    
+    \item [Discussion] Consists of a further evaluation of the obtained results. Additionally, the research questions are explicitly answered, followed by potential future work.
+\end{description}
+
+% \todo{}
+
+\section{Contribution Statement}
+The work for this thesis, including writing the report, research, planning, implementing algorithms, and brainstorming ideas, was completed in full cooperation between the authors. Most of the implementations were completed in office, with frequent discussions, pair programming, and switching between individual tasks. When not working physically together, all individual work was processed and discussed internally. This also includes the study of literature, where the material was thoroughly discussed to provide both authors with the same background knowledge. In conclusion, both authors contributed equally and played crucial roles in the finalization of this thesis.
+\\\\
+The original work of the thesis includes the code available in Appendix, along with most of the ideas and structures proposed in Chapter \ref{sec:chapterimplementation}. For example, the proposed algorithms for adding vertices and calculating intersection through chunk-based local decompression are original ideas. Furthermore, integrating and evaluating existing compression techniques into a format that supports local decompression combined with the exploitation of the maps domain to further reduce the data size, such as by utilizing integer decomposed coordinates, is original work of the authors.
